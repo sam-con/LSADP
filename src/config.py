@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SHOW_DEVELOPMENT_PAGE = False
+SHOW_DEVELOPMENT_PAGE = True
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -38,12 +38,12 @@ CANONICAL_LABELS = {
 }
 
 CANONICAL_LEAGUES = {
-    "1qb_standard": "",
-    "1qb_half_ppr": "",
-    "1qb_ppr": "",
-    "sf_standard": "",
-    "sf_half_ppr": "",
-    "sf_ppr": "",
+    "1qb_standard": "1395458028047720448",
+    "1qb_half_ppr": "1395457853489176576",
+    "1qb_ppr": "1395452196744622080",
+    "sf_standard": "1395457482700128256",
+    "sf_half_ppr": "1395457206857515008",
+    "sf_ppr": "1395452598621851648",
 }
 
 CANONICAL_ADP_PATHS = {

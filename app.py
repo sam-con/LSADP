@@ -225,6 +225,16 @@ def format_timestamp(value: str | None) -> str:
     return value.replace("T", " ").replace("+00:00", " UTC")
 
 
+def ensure_widget_choice(key: str, options: list[str], default: str | None = None) -> str | None:
+    if not options:
+        st.session_state.pop(key, None)
+        return None
+    selected = st.session_state.get(key)
+    if selected not in options:
+        st.session_state[key] = default if default in options else options[0]
+    return str(st.session_state[key])
+
+
 def render_public_results(analysis: dict[str, Any]) -> None:
     results = analysis["results"].copy()
     target_environment = analysis["target_environment"]
@@ -234,7 +244,7 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     selected_label = analysis["selected_canonical_label"]
     requested_label = analysis.get("requested_canonical_label", selected_label)
     fallback_used = bool(analysis.get("selected_canonical_fallback"))
-    canonical_config = artifacts.metadata["canonical_environments"][selected_key]
+    canonical_config = artifacts.metadata.get("canonical_environments", {}).get(selected_key, {})
     target_league = target_environment["league"]
 
     st.subheader("League Settings")
@@ -260,7 +270,11 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     )
 
     st.subheader("Adjusted Rankings")
-    search = st.text_input("Search players", placeholder="Filter by player name or position")
+    search = st.text_input(
+        "Search players",
+        placeholder="Filter by player name or position",
+        key="public_player_search",
+    )
     filtered = results.copy()
     if search:
         needle = search.lower()
@@ -306,10 +320,17 @@ def render_public_results(analysis: dict[str, Any]) -> None:
         data=results.to_csv(index=False).encode("utf-8"),
         file_name=f"league_adjusted_adp_{target_league.league_id}.csv",
         mime="text/csv",
+        key="public_download_csv",
     )
 
     st.subheader("Player Explanation")
-    selected_player_name = st.selectbox("Select a player", options=results["player_name"].tolist(), index=0)
+    player_options = results["player_name"].tolist()
+    ensure_widget_choice("public_selected_player_name", player_options, player_options[0] if player_options else None)
+    selected_player_name = st.selectbox(
+        "Select a player",
+        options=player_options,
+        key="public_selected_player_name",
+    )
     selected_player = results.loc[results["player_name"] == selected_player_name].iloc[0]
     st.markdown(
         f"""
@@ -331,7 +352,15 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     )
 
     st.subheader("Visuals")
-    position_filter = st.segmented_control("Position Filter", options=["ALL", "QB", "RB", "WR", "TE"], default="ALL")
+    position_filter_options = ["ALL", "QB", "RB", "WR", "TE"]
+    default_position_filter = ensure_widget_choice("public_position_filter", position_filter_options, "ALL")
+    position_filter = st.segmented_control(
+        "Position Filter",
+        options=position_filter_options,
+        default=default_position_filter,
+        key="public_position_filter",
+    )
+    position_filter = position_filter or default_position_filter or "ALL"
     left, right = st.columns(2)
     left.plotly_chart(build_adp_movement_chart(results, position_filter=position_filter), use_container_width=True)
     right.plotly_chart(build_current_vs_adjusted_scatter(results), use_container_width=True)
@@ -352,7 +381,13 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     )
     st.plotly_chart(build_positional_impact_chart(impact_summary), use_container_width=True)
 
-    curve_position = st.selectbox("Curve Position", options=["QB", "RB", "WR", "TE"], index=0)
+    curve_position_options = ["QB", "RB", "WR", "TE"]
+    ensure_widget_choice("public_curve_position", curve_position_options, "QB")
+    curve_position = st.selectbox(
+        "Curve Position",
+        options=curve_position_options,
+        key="public_curve_position",
+    )
     source_curves = artifacts.curves[(artifacts.curves["environment_key"] == selected_key) & (artifacts.curves["dataset"] == "fitted")]
     source_empirical = artifacts.curves[(artifacts.curves["environment_key"] == selected_key) & (artifacts.curves["dataset"] == "empirical")]
     source_replacement = artifacts.replacement[
@@ -392,10 +427,13 @@ def render_public_results(analysis: dict[str, Any]) -> None:
             }
         )
         st.caption("Public runtime reads the saved BeatADP Sleeper canonical snapshot from disk and does not scrape BeatADP live.")
-        if target_environment.get("public_runtime_mode") == "no_history":
+        if target_environment.get("public_runtime_mode") in {"no_history", "no_history_scoring_interpolated"}:
             st.info(
-                "This public analysis used the canonical anchor's saved production curves and recalculated replacement levels from your league's current roster settings. Sleeper league history was not required."
+                "This public analysis used the canonical anchor's saved production curves and recalculated replacement levels from your league's current roster settings because usable Sleeper league history was unavailable."
             )
+            fallback_reason = target_environment.get("fallback_reason")
+            if fallback_reason:
+                st.caption(f"Fallback reason: {fallback_reason}")
         else:
             coverage_rows = [
                 {
@@ -453,6 +491,11 @@ def render_public_page() -> None:
                 else:
                     st.session_state["public_analysis_league_id"] = league_id.strip()
                     analyzed_league_id = league_id.strip()
+                    st.session_state["public_player_search"] = ""
+                    if analysis is not None and not analysis["results"].empty:
+                        st.session_state["public_selected_player_name"] = str(analysis["results"].iloc[0]["player_name"])
+                    st.session_state["public_position_filter"] = "ALL"
+                    st.session_state["public_curve_position"] = "QB"
     elif analyzed_league_id:
         try:
             analysis = cached_run_public_analysis(analyzed_league_id)
@@ -776,43 +819,7 @@ def render_development_page() -> None:
 
 
 def render_public_page_live() -> None:
-    render_hero()
-    try:
-        production_artifacts = CanonicalArtifactManager.production().load()
-    except ConfigError as exc:
-        st.error(str(exc))
-        st.info(
-            "Configure the canonical Sleeper league IDs in `src/config.py`, refresh BeatADP canonical ADPs from the "
-            "Development page, build a candidate model, and promote it to production."
-        )
-        return
-
-    st.caption(f"Model version {APP_VERSION} | Production canonical model loaded from disk | BeatADP canonical ADPs cached separately")
-    st.write(
-        {
-            "production_model": production_artifacts.metadata["selected_model_name"],
-            "selected_metric_mode": production_artifacts.metadata["selected_metric_mode"],
-            "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
-            "available_canonical_environments": production_artifacts.metadata.get("available_canonical_environments"),
-        }
-    )
-    league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID")
-    if st.button("Analyze League", type="primary", use_container_width=True):
-        if not league_id.strip():
-            st.warning("Enter a Sleeper league ID to analyze.")
-            return
-        with st.spinner("Selecting the closest canonical anchor, validating four-season history, and transforming ADP..."):
-            try:
-                analysis = cached_run_public_analysis(league_id.strip())
-            except LSADPError as exc:
-                st.error(str(exc))
-                return
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Unexpected failure while analyzing the league: {exc}")
-                return
-        render_public_results(analysis)
-    else:
-        st.info("Enter a Sleeper league ID and the app will anchor from the nearest saved BeatADP Sleeper canonical market automatically.")
+    render_public_page()
 
 
 def main() -> None:

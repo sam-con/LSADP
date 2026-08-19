@@ -272,6 +272,36 @@ def test_public_runtime_uses_synthetic_sf_ppr_when_observed_market_is_missing(
     assert analysis["adp_source_metadata"]["synthetic"] is True
 
 
+def test_public_runtime_prefers_league_history_when_available(
+    tmp_path,
+    mock_client,
+    canonical_league_ids,
+    canonical_adp_paths,
+) -> None:
+    candidate_manager = _manager(tmp_path, "candidate")
+    production_manager = _manager(tmp_path, "production")
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
+    save_candidate_model(candidate_manager, bundle)
+    promote_candidate_model(candidate_manager, production_manager)
+
+    analysis = run_public_canonical_analysis(
+        client=mock_client,
+        production_manager=production_manager,
+        target_league_id="2026",
+        canonical_adp_paths=canonical_adp_paths,
+    )
+
+    assert analysis["target_environment"]["public_runtime_mode"] == "historical"
+    assert analysis["target_environment"]["historical_source"] == "league_history"
+    assert analysis["target_environment"]["coverage"]
+    assert analysis["results"]["league_expected_ppg"].notna().any()
+
+
 def test_public_runtime_analyzes_league_without_history(
     tmp_path,
     mock_client,
@@ -305,7 +335,7 @@ def test_public_runtime_analyzes_league_without_history(
 
     assert analysis["selected_canonical_key"] == "1qb_ppr"
     assert analysis["target_environment"]["historical_source"] == "canonical_anchor_fallback"
-    assert analysis["target_environment"]["public_runtime_mode"] == "no_history"
+    assert analysis["target_environment"]["public_runtime_mode"] in {"no_history", "no_history_scoring_interpolated"}
     assert analysis["target_environment"]["coverage"] == []
     assert not analysis["results"].empty
     assert analysis["results"]["league_adjusted_adp"].notna().all()

@@ -19,6 +19,7 @@ from src.canonical import (
     canonical_environment_key_for_league,
     classify_transformation_type,
     detect_qb_format,
+    detect_reception_value,
     detect_reception_format,
     directed_transform_pairs,
     ordered_canonical_environment_keys,
@@ -30,7 +31,7 @@ from src.donors import (
     build_historical_player_weeks_from_donor_validation,
     validate_historical_donor_configuration,
 )
-from src.models import ConfigError, HistoricalLeagueSummary, LeagueSettings, ModelingConfig
+from src.models import ConfigError, HistoricalDataError, HistoricalLeagueSummary, LeagueSettings, ModelingConfig
 from src.replacement import calculate_starter_demand_replacement
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
@@ -953,12 +954,11 @@ def build_public_target_environment_from_anchor(
 ) -> dict[str, Any]:
     """Build a best-effort public target environment without requiring league history."""
 
-    fitted_curves = artifacts.curves[
-        (artifacts.curves["environment_key"] == source_key) & (artifacts.curves["dataset"] == "fitted")
-    ].copy()
-    empirical_curves = artifacts.curves[
-        (artifacts.curves["environment_key"] == source_key) & (artifacts.curves["dataset"] == "empirical")
-    ].copy()
+    fitted_curves, empirical_curves, runtime_mode = build_public_target_curve_bundle(
+        artifacts=artifacts,
+        source_key=source_key,
+        target_league=target_league,
+    )
     if fitted_curves.empty:
         raise ConfigError(f"Production curves are missing for canonical anchor {source_key}.")
 
@@ -1001,8 +1001,88 @@ def build_public_target_environment_from_anchor(
         "replacement": replacement,
         "vorp_table": vorp_table,
         "historical_source": "canonical_anchor_fallback",
-        "public_runtime_mode": "no_history",
+        "public_runtime_mode": runtime_mode,
     }
+
+
+def _curve_dataset_for_environment(artifacts, environment_key: str, dataset: str) -> pd.DataFrame:
+    return artifacts.curves[
+        (artifacts.curves["environment_key"] == environment_key) & (artifacts.curves["dataset"] == dataset)
+    ][["position", "rank", "expected_ppg", "dataset"]].copy()
+
+
+def _interpolate_curve_dataset(
+    lower_frame: pd.DataFrame,
+    upper_frame: pd.DataFrame,
+    *,
+    lower_value: float,
+    upper_value: float,
+    target_value: float,
+    dataset: str,
+) -> pd.DataFrame:
+    merged = lower_frame.merge(
+        upper_frame[["position", "rank", "expected_ppg"]].rename(columns={"expected_ppg": "upper_expected_ppg"}),
+        on=["position", "rank"],
+        how="inner",
+    )
+    if merged.empty:
+        return pd.DataFrame(columns=["position", "rank", "expected_ppg", "dataset"])
+    if abs(upper_value - lower_value) < 1e-9:
+        weight = 0.0
+    else:
+        weight = (target_value - lower_value) / (upper_value - lower_value)
+    merged["expected_ppg"] = merged["expected_ppg"] + weight * (merged["upper_expected_ppg"] - merged["expected_ppg"])
+    merged["dataset"] = dataset
+    return merged[["position", "rank", "expected_ppg", "dataset"]].sort_values(["position", "rank"]).reset_index(drop=True)
+
+
+def build_public_target_curve_bundle(
+    *,
+    artifacts,
+    source_key: str,
+    target_league: LeagueSettings,
+) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Build public target curves using canonical scoring interpolation when possible."""
+
+    qb_format = detect_qb_format(target_league)
+    target_reception = detect_reception_value(target_league)
+    if qb_format == "sf":
+        lower_key, upper_key = "sf_half_ppr", "sf_ppr"
+        lower_value, upper_value = 0.5, 1.0
+    else:
+        lower_key, upper_key = "1qb_half_ppr", "1qb_ppr"
+        lower_value, upper_value = 0.5, 1.0
+
+    available_curve_keys = set(artifacts.curves["environment_key"].astype(str).unique())
+    if lower_key in available_curve_keys and upper_key in available_curve_keys:
+        lower_fitted = _curve_dataset_for_environment(artifacts, lower_key, "fitted")
+        upper_fitted = _curve_dataset_for_environment(artifacts, upper_key, "fitted")
+        lower_empirical = _curve_dataset_for_environment(artifacts, lower_key, "empirical")
+        upper_empirical = _curve_dataset_for_environment(artifacts, upper_key, "empirical")
+        fitted_curves = _interpolate_curve_dataset(
+            lower_fitted,
+            upper_fitted,
+            lower_value=lower_value,
+            upper_value=upper_value,
+            target_value=target_reception,
+            dataset="fitted",
+        )
+        empirical_curves = _interpolate_curve_dataset(
+            lower_empirical,
+            upper_empirical,
+            lower_value=lower_value,
+            upper_value=upper_value,
+            target_value=target_reception,
+            dataset="empirical",
+        )
+        if not fitted_curves.empty:
+            return fitted_curves, empirical_curves, "no_history_scoring_interpolated"
+
+    return (
+        _curve_dataset_for_environment(artifacts, source_key, "fitted"),
+        _curve_dataset_for_environment(artifacts, source_key, "empirical"),
+        "no_history",
+    )
 
 
 def build_public_anchor_projection(
@@ -1136,10 +1216,17 @@ def run_public_canonical_analysis(
 
     artifacts = production_manager.load()
     modeling_config = modeling_config or default_modeling_config()
+    selected_replacement_method = str(artifacts.metadata.get("selected_replacement_method", "starter_demand"))
     target_league = client.get_league(target_league_id)
-    available_environment_keys = ordered_canonical_environment_keys(
+    metadata_environment_keys = ordered_canonical_environment_keys(
         artifacts.metadata.get("available_canonical_environments") or artifacts.metadata["canonical_environments"].keys()
     )
+    curve_environment_keys = ordered_canonical_environment_keys(set(artifacts.curves["environment_key"].astype(str).unique()))
+    available_environment_keys = tuple(
+        environment_key for environment_key in metadata_environment_keys if environment_key in set(curve_environment_keys)
+    )
+    if not available_environment_keys:
+        raise ConfigError("Production canonical model does not contain any usable canonical anchors.")
     requested_anchor_key = canonical_environment_key_for_league(
         target_league,
         environment_keys=CANONICAL_ENVIRONMENTS,
@@ -1148,11 +1235,23 @@ def run_public_canonical_analysis(
         target_league,
         environment_keys=available_environment_keys,
     )
-    target_environment = build_public_target_environment_from_anchor(
-        artifacts=artifacts,
-        source_key=anchor_key,
-        target_league=target_league,
-    )
+    try:
+        target_environment = load_league_environment(
+            client=client,
+            league_id=target_league_id,
+            modeling_config=modeling_config,
+            today=today,
+            replacement_method=selected_replacement_method,
+        )
+        target_environment["public_runtime_mode"] = "historical"
+        target_environment.setdefault("historical_source", "league_history")
+    except HistoricalDataError as exc:
+        target_environment = build_public_target_environment_from_anchor(
+            artifacts=artifacts,
+            source_key=anchor_key,
+            target_league=target_league,
+        )
+        target_environment["fallback_reason"] = str(exc)
     results, source_adp_metadata = build_public_anchor_projection(
         source_key=anchor_key,
         target_environment=target_environment,

@@ -8,9 +8,11 @@ import pytest
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.replacement import calculate_starter_demand_replacement
 from src.model_builder import (
+    build_error_by_adp_bucket,
     build_candidate_model,
     predict_between_canonical_environments,
     promote_candidate_model,
+    run_public_canonical_analysis,
     save_candidate_model,
     validate_environment_identity,
 )
@@ -66,6 +68,38 @@ def test_candidate_build_generates_exactly_twelve_directed_validations(
     selected = bundle["selected_validation"]
     assert len(selected) == 12
     assert set(selected["transform_type"]) == {"Scoring-only", "Scarcity-only", "Combined"}
+
+
+def test_candidate_build_accepts_three_market_beatadp_snapshot(
+    mock_client,
+    canonical_league_ids,
+    canonical_adp_paths,
+) -> None:
+    three_market_paths = {key: value for key, value in canonical_adp_paths.items() if key != "sf_ppr"}
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=three_market_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
+    selected = bundle["selected_validation"]
+    assert len(selected) == 6
+    assert bundle["metadata"]["available_canonical_environments"] == ["1qb_half_ppr", "1qb_ppr", "sf_half_ppr"]
+
+
+def test_candidate_build_blocks_when_minimum_three_market_set_is_missing(
+    mock_client,
+    canonical_league_ids,
+    canonical_adp_paths,
+) -> None:
+    incomplete_paths = {key: value for key, value in canonical_adp_paths.items() if key in {"1qb_half_ppr", "1qb_ppr"}}
+    with pytest.raises(ConfigError, match="Missing required markets"):
+        build_candidate_model(
+            mock_client,
+            canonical_leagues=canonical_league_ids,
+            canonical_adp_paths=incomplete_paths,
+            donor_configuration=donor_configuration_frame(),
+        )
 
 
 def test_candidate_build_does_not_overwrite_production_files(
@@ -151,6 +185,36 @@ def test_saved_model_reloads_deterministically(
     second = candidate_manager.load()
     assert first.metadata == second.metadata
     assert first.model_parameters.equals(second.model_parameters)
+
+
+def test_public_runtime_falls_back_from_sf_ppr_to_sf_half_ppr_when_needed(
+    tmp_path,
+    mock_client,
+    canonical_league_ids,
+    canonical_adp_paths,
+) -> None:
+    three_market_paths = {key: value for key, value in canonical_adp_paths.items() if key != "sf_ppr"}
+    candidate_manager = _manager(tmp_path, "candidate")
+    production_manager = _manager(tmp_path, "production")
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=three_market_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
+    save_candidate_model(candidate_manager, bundle)
+    promote_candidate_model(candidate_manager, production_manager)
+
+    analysis = run_public_canonical_analysis(
+        client=mock_client,
+        production_manager=production_manager,
+        target_league_id="sf2026",
+        canonical_adp_paths=three_market_paths,
+    )
+
+    assert analysis["requested_canonical_key"] == "sf_ppr"
+    assert analysis["selected_canonical_key"] == "sf_half_ppr"
+    assert analysis["selected_canonical_fallback"] is True
 
 
 def test_increasing_team_count_pushes_replacement_deeper(mock_client) -> None:
@@ -246,3 +310,26 @@ def test_half_ppr_to_ppr_behaves_directionally_sensibly(
     wr_change = prediction[prediction["position"] == "WR"]["adp_change"].mean()
     qb_change = prediction[prediction["position"] == "QB"]["adp_change"].mean()
     assert wr_change > qb_change
+
+
+def test_build_error_by_adp_bucket_uses_actual_adp_after_merge() -> None:
+    predicted = pd.DataFrame(
+        [
+            {"player_name": "Player One", "position": "RB", "adp": 8.0, "league_adjusted_adp": 10.0},
+            {"player_name": "Player Two", "position": "WR", "adp": 40.0, "league_adjusted_adp": 46.0},
+        ]
+    )
+    actual = pd.DataFrame(
+        [
+            {"player_name": "Player One", "position": "RB", "adp": 12.0},
+            {"player_name": "Player Two", "position": "WR", "adp": 44.0},
+        ]
+    )
+
+    bucket_frame = build_error_by_adp_bucket(predicted, actual)
+    bucket_lookup = bucket_frame.set_index("bucket")
+
+    assert bucket_lookup.loc["1-12", "player_count"] == 1
+    assert bucket_lookup.loc["1-12", "mae"] == pytest.approx(2.0)
+    assert bucket_lookup.loc["25-50", "player_count"] == 1
+    assert bucket_lookup.loc["25-50", "mae"] == pytest.approx(2.0)

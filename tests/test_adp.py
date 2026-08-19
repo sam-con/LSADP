@@ -8,7 +8,13 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from src.adp import ADPDataProvider, FantasyCalcADPProvider
+from src.adp import (
+    ADPDataProvider,
+    BEATADP_SOURCE_NAME,
+    BeatADPProvider,
+    FANTASYCALC_ADP_UNAVAILABLE_MESSAGE,
+    FantasyCalcADPProvider,
+)
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.model_builder import build_candidate_model, run_public_canonical_analysis, save_candidate_model
 from src.models import ConfigError
@@ -46,14 +52,8 @@ def sample_fantasycalc_payload(adp_offset: float = 0.0) -> list[dict[str, Any]]:
         },
         {
             "player": {"name": "Josh Allen", "position": "QB", "maybeTeam": "BUF", "sleeperId": "Q1"},
-            "maybeAdp": None,
-            "overallRank": 5 + adp_offset,
-            "positionRank": 1,
-        },
-        {
-            "player": {"name": "Josh Allen", "position": "QB", "maybeTeam": "BUF", "sleeperId": "Q1"},
             "maybeAdp": 7.0 + adp_offset,
-            "overallRank": 6,
+            "overallRank": 5 + adp_offset,
             "positionRank": 2,
         },
         {
@@ -63,6 +63,19 @@ def sample_fantasycalc_payload(adp_offset: float = 0.0) -> list[dict[str, Any]]:
             "positionRank": 1,
         },
     ]
+
+
+def sample_fantasycalc_payload_with_missing_adp() -> list[dict[str, Any]]:
+    payload = sample_fantasycalc_payload()
+    payload.append(
+        {
+            "player": {"name": "Lamar Jackson", "position": "QB", "maybeTeam": "BAL", "sleeperId": "Q2"},
+            "maybeAdp": None,
+            "overallRank": 4,
+            "positionRank": 1,
+        }
+    )
+    return payload
 
 
 class DummyResponse:
@@ -91,37 +104,54 @@ class DummySession:
         return DummyResponse(self.payloads.pop(0))
 
 
-class StaticFantasyCalcProvider:
+class DummyHTMLResponse:
+    def __init__(self, html: str) -> None:
+        self.text = html
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class DummyHTMLSession:
+    def __init__(self, html: str) -> None:
+        self.html = html
+        self.calls: list[dict[str, Any]] = []
+
+    def get(self, url: str, headers: dict[str, Any], timeout: int) -> DummyHTMLResponse:
+        self.calls.append({"url": url, "headers": headers, "timeout": timeout})
+        return DummyHTMLResponse(self.html)
+
+
+class StaticCanonicalADPProvider:
     def __init__(self, frames: dict[str, pd.DataFrame]) -> None:
         self.frames = {key: ADPDataProvider._normalize_frame(value.copy()) for key, value in frames.items()}
 
-    def _entry(self, environment_key: str, team_count: int) -> dict[str, Any]:
+    def _entry(self, environment_key: str) -> dict[str, Any]:
         frame = self.frames[environment_key]
         return {
-            "status": "cache_hit",
-            "retrieved_at": "2026-08-18T00:00:00+00:00",
-            "team_count": team_count,
+            "status": "saved",
+            "retrieved_at": "2026-08-19T00:00:00+00:00",
+            "recorded_at": "2026-08-15",
             "player_count": int(len(frame)),
-            "fallback_adp_count": int((frame.get("adp_source_field", pd.Series(dtype=str)) == "overallRank").sum())
-            if "adp_source_field" in frame.columns
-            else 0,
+            "path": f"{environment_key}.csv",
         }
 
-    def load_canonical_markets(self, team_counts_by_environment: dict[str, int], *, force_refresh: bool = False) -> dict[str, Any]:
+    def load_canonical_markets(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        _ = force_refresh
         return {
-            "source": "FantasyCalc",
+            "source": BEATADP_SOURCE_NAME,
             "status": "Healthy",
-            "last_refresh": "2026-08-18T00:00:00+00:00",
-            "canonical_team_count": sorted(set(team_counts_by_environment.values())),
-            "formats": {
-                environment_key: self._entry(environment_key, team_counts_by_environment[environment_key])
-                for environment_key in team_counts_by_environment
-            },
+            "last_refresh": "2026-08-19T00:00:00+00:00",
+            "available_environments": list(self.frames),
+            "missing_environments": [key for key in ("1qb_half_ppr", "1qb_ppr", "sf_half_ppr", "sf_ppr") if key not in self.frames],
+            "formats": {environment_key: self._entry(environment_key) for environment_key in self.frames},
             "frames": {key: value.copy() for key, value in self.frames.items()},
         }
 
     def load_environment(self, environment_key: str, *, num_teams: int, force_refresh: bool = False) -> tuple[pd.DataFrame, dict[str, Any]]:
-        return self.frames[environment_key].copy(), self._entry(environment_key, num_teams)
+        _ = num_teams
+        _ = force_refresh
+        return self.frames[environment_key].copy(), self._entry(environment_key)
 
 
 def _manager(root: Path, name: str) -> CanonicalArtifactManager:
@@ -137,6 +167,69 @@ def _manager(root: Path, name: str) -> CanonicalArtifactManager:
     )
 
 
+def sample_sleeper_players_payload() -> dict[str, dict[str, Any]]:
+    return {
+        "Q1": {"player_id": "Q1", "full_name": "QB Player 1", "position": "QB", "team": "T1"},
+        "R1": {"player_id": "R1", "full_name": "RB Player 1", "position": "RB", "team": "T1"},
+        "W1": {"player_id": "W1", "full_name": "WR Player 1", "position": "WR", "team": "T1"},
+        "T1": {"player_id": "T1", "full_name": "TE Player 1", "position": "TE", "team": "T1"},
+    }
+
+
+def test_beatadp_fixture_parses_and_persists_three_markets(tmp_path) -> None:
+    fixture_html = (Path(__file__).parent / "fixtures" / "beatadp_platform_adp.html").read_text(encoding="utf-8")
+    provider = BeatADPProvider(
+        session=DummyHTMLSession(fixture_html),
+        metadata_path=tmp_path / "adp_metadata.json",
+        canonical_paths={
+            "1qb_half_ppr": tmp_path / "adp_1qb_half_ppr.csv",
+            "1qb_ppr": tmp_path / "adp_1qb_ppr.csv",
+            "sf_half_ppr": tmp_path / "adp_sf_half_ppr.csv",
+            "sf_ppr": tmp_path / "adp_sf_ppr.csv",
+        },
+    )
+
+    bundle = provider.refresh_canonical_markets(sleeper_players_payload=sample_sleeper_players_payload())
+
+    assert bundle["available_environments"] == ("1qb_half_ppr", "1qb_ppr", "sf_half_ppr")
+    assert bundle["missing_environments"] == ["sf_ppr"]
+    assert set(bundle["frames"]) == {"1qb_half_ppr", "1qb_ppr", "sf_half_ppr"}
+    assert bundle["formats"]["1qb_ppr"]["unmatched_rows"] == 1
+    assert bundle["formats"]["1qb_ppr"]["missing_sleeper_adp_rows"] == 1
+    assert float(bundle["frames"]["1qb_ppr"].iloc[0]["adp"]) == 4.0
+    assert bundle["frames"]["1qb_ppr"]["source"].eq(BEATADP_SOURCE_NAME).all()
+    assert not (tmp_path / "adp_sf_ppr.csv").exists()
+
+
+def test_beatadp_parser_accepts_current_escaped_marker_style() -> None:
+    html = '<script>{"payload":"{\\"slices\\":[{\\"platform\\":\\"SLEEPER\\",\\"scoringFormat\\":\\"PPR\\",\\"draftType\\":\\"REDRAFT\\",\\"qbType\\":\\"1QB\\",\\"recordedAt\\":\\"2026-08-15\\",\\"playerCount\\":1}],\\"players\\":[{\\"id\\":1,\\"fullName\\":\\"QB Player 1\\",\\"position\\":\\"QB\\",\\"teamId\\":\\"T1\\",\\"adps\\":{\\"SLEEPER|PPR|REDRAFT|1QB\\":10.0}}],\\"latestRecordedAt\\":\\"2026-08-15\\"}"}<\/script>'
+    payload = BeatADPProvider().parse_platform_payload(html)
+
+    assert payload["latest_recorded_at"] == "2026-08-15"
+    assert payload["slices"][0]["platform"] == "SLEEPER"
+    assert payload["players"][0]["fullName"] == "QB Player 1"
+
+
+def test_beatadp_missing_sleeper_values_never_substitute_other_columns(tmp_path) -> None:
+    fixture_html = (Path(__file__).parent / "fixtures" / "beatadp_platform_adp.html").read_text(encoding="utf-8")
+    provider = BeatADPProvider(
+        session=DummyHTMLSession(fixture_html),
+        metadata_path=tmp_path / "adp_metadata.json",
+        canonical_paths={
+            "1qb_half_ppr": tmp_path / "adp_1qb_half_ppr.csv",
+            "1qb_ppr": tmp_path / "adp_1qb_ppr.csv",
+            "sf_half_ppr": tmp_path / "adp_sf_half_ppr.csv",
+            "sf_ppr": tmp_path / "adp_sf_ppr.csv",
+        },
+    )
+
+    bundle = provider.refresh_canonical_markets(sleeper_players_payload=sample_sleeper_players_payload())
+    player_names = bundle["frames"]["1qb_ppr"]["player_name"].tolist()
+
+    assert "Ghost Player" not in player_names
+    assert "Unknown Rookie" not in player_names
+
+
 def test_fantasycalc_response_parses_and_reports_diagnostics(tmp_path) -> None:
     provider = FantasyCalcADPProvider(
         session=DummySession([sample_fantasycalc_payload()]),
@@ -147,11 +240,51 @@ def test_fantasycalc_response_parses_and_reports_diagnostics(tmp_path) -> None:
     frame, metadata = provider.load_environment("1qb_ppr", num_teams=12)
 
     assert set(frame["sleeper_id"].dropna()) == {"W1", "R1", "Q1"}
-    assert float(frame.loc[frame["sleeper_id"] == "Q1", "adp"].iloc[0]) == 5.0
-    assert metadata["fallback_adp_count"] == 1
+    assert float(frame.loc[frame["sleeper_id"] == "Q1", "adp"].iloc[0]) == 7.0
+    assert float(frame.loc[frame["sleeper_id"] == "Q1", "overall_rank"].iloc[0]) == 5.0
+    assert float(frame.loc[frame["sleeper_id"] == "Q1", "position_rank_market"].iloc[0]) == 2.0
+    assert metadata["non_null_maybe_adp_count"] == 3
+    assert metadata["missing_adp_count"] == 0
     assert metadata["missing_position_count"] == 1
-    assert metadata["duplicate_player_ids"] == ["Q1"]
+    assert metadata["duplicate_player_ids"] == []
     assert metadata["status"] == "refreshed"
+
+
+def test_null_maybe_adp_never_falls_back_to_overall_rank(tmp_path) -> None:
+    provider = FantasyCalcADPProvider(
+        session=DummySession([sample_fantasycalc_payload_with_missing_adp()]),
+        cache_dir=tmp_path,
+        metadata_path=tmp_path / "metadata.json",
+    )
+
+    with pytest.raises(ConfigError, match="FantasyCalc ADP is currently unavailable for this configuration."):
+        provider.load_environment("1qb_ppr", num_teams=12)
+
+
+def test_missing_adp_causes_controlled_failure(tmp_path) -> None:
+    provider = FantasyCalcADPProvider(
+        session=DummySession([sample_fantasycalc_payload_with_missing_adp()]),
+        cache_dir=tmp_path,
+        metadata_path=tmp_path / "metadata.json",
+    )
+
+    with pytest.raises(ConfigError, match=FANTASYCALC_ADP_UNAVAILABLE_MESSAGE):
+        provider.load_environment("sf_ppr", num_teams=12)
+
+
+def test_overall_rank_and_adp_remain_distinct_fields(tmp_path) -> None:
+    provider = FantasyCalcADPProvider(
+        session=DummySession([sample_fantasycalc_payload()]),
+        cache_dir=tmp_path,
+        metadata_path=tmp_path / "metadata.json",
+    )
+
+    frame, _ = provider.load_environment("1qb_half_ppr", num_teams=12)
+
+    assert "overall_rank" in frame.columns
+    assert "adp" in frame.columns
+    assert not frame["adp"].equals(frame["overall_rank"])
+    assert frame["adp_source_field"].eq("maybeAdp").all()
 
 
 def test_parameter_mapping_covers_all_four_formats() -> None:
@@ -221,6 +354,33 @@ def test_failed_refresh_uses_valid_cached_copy(tmp_path) -> None:
     assert "FantasyCalc down" in runtime_metadata["warning"]
 
 
+def test_cached_rows_backed_by_rankings_are_rejected(tmp_path) -> None:
+    cache_path = tmp_path / "1qb_ppr.csv"
+    pd.DataFrame(
+        [
+            {
+                "player_id": "Q1",
+                "sleeper_id": "Q1",
+                "player_name": "Josh Allen",
+                "position": "QB",
+                "team": "BUF",
+                "adp": 5.0,
+                "overall_rank": 5.0,
+                "position_rank_market": 1.0,
+                "canonical_format": "1qb_ppr",
+                "source": "FantasyCalc",
+                "adp_source_field": "overallRank",
+                "retrieved_at": "2026-08-19T00:00:00+00:00",
+            }
+        ]
+    ).to_csv(cache_path, index=False)
+
+    provider = FantasyCalcADPProvider(cache_dir=tmp_path, metadata_path=tmp_path / "metadata.json")
+
+    with pytest.raises(ConfigError, match="contains rows not backed by maybeAdp"):
+        provider._load_cached_frame(cache_path)
+
+
 def test_failed_refresh_without_cache_fails_clearly(tmp_path) -> None:
     provider = FantasyCalcADPProvider(
         session=DummySession(error=RuntimeError("No network")),
@@ -258,7 +418,7 @@ def test_candidate_model_uses_provider_and_public_runtime_uses_latest_adp(
     canonical_league_ids,
     canonical_adp_frames,
 ) -> None:
-    build_provider = StaticFantasyCalcProvider(canonical_adp_frames)
+    build_provider = StaticCanonicalADPProvider(canonical_adp_frames)
     bundle = build_candidate_model(
         mock_client,
         canonical_leagues=canonical_league_ids,
@@ -274,7 +434,7 @@ def test_candidate_model_uses_provider_and_public_runtime_uses_latest_adp(
 
     updated_frames = {key: value.copy() for key, value in canonical_adp_frames.items()}
     updated_frames["1qb_ppr"].loc[updated_frames["1qb_ppr"]["player_name"] == "WR Player 1", "adp"] = 42.0
-    runtime_provider = StaticFantasyCalcProvider(updated_frames)
+    runtime_provider = StaticCanonicalADPProvider(updated_frames)
 
     analysis = run_public_canonical_analysis(
         client=mock_client,
@@ -290,7 +450,7 @@ def test_candidate_model_uses_provider_and_public_runtime_uses_latest_adp(
 
 def test_identical_canonical_markets_block_calibration(mock_client, canonical_league_ids, canonical_adp_frames) -> None:
     identical_frame = canonical_adp_frames["1qb_ppr"]
-    provider = StaticFantasyCalcProvider({environment_key: identical_frame.copy() for environment_key in canonical_league_ids})
+    provider = StaticCanonicalADPProvider({environment_key: identical_frame.copy() for environment_key in canonical_league_ids})
 
     with pytest.raises(ConfigError):
         build_candidate_model(

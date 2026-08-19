@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SHOW_DEVELOPMENT_PAGE = False
+SHOW_DEVELOPMENT_PAGE = True
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -17,6 +17,7 @@ ADP_CACHE_METADATA_FILE = ADP_CACHE_DIR / "metadata.json"
 HISTORICAL_DONOR_FILE = BASELINE_DIR / "historical_donors_by_year.json"
 HISTORICAL_DONOR_DISCOVERY_EXPORT_FILE = BASE_DIR / "donor_leagues.csv"
 HISTORICAL_DONOR_METADATA_FILE = BASELINE_DIR / "historical_donor_metadata.json"
+CANONICAL_ADP_METADATA_FILE = BASELINE_DIR / "adp_metadata.json"
 
 ADP_1QB_PATH = DATA_DIR / "adp_1qb.csv"
 ADP_SUPERFLEX_PATH = DATA_DIR / "adp_superflex.csv"
@@ -29,6 +30,12 @@ CANONICAL_ENVIRONMENTS = (
     "1qb_ppr",
     "sf_half_ppr",
     "sf_ppr",
+)
+
+MINIMUM_VIABLE_CANONICAL_ENVIRONMENTS = (
+    "1qb_half_ppr",
+    "1qb_ppr",
+    "sf_half_ppr",
 )
 
 CANONICAL_LABELS = {
@@ -53,15 +60,18 @@ CANONICAL_LEAGUES = {
 }
 
 CANONICAL_ADP_PATHS = {
-    "1qb_half_ppr": DATA_DIR / "adp_1qb_half_ppr.csv",
-    "1qb_ppr": DATA_DIR / "adp_1qb_ppr.csv",
-    "sf_half_ppr": DATA_DIR / "adp_sf_half_ppr.csv",
-    "sf_ppr": DATA_DIR / "adp_sf_ppr.csv",
+    "1qb_half_ppr": BASELINE_DIR / "adp_1qb_half_ppr.csv",
+    "1qb_ppr": BASELINE_DIR / "adp_1qb_ppr.csv",
+    "sf_half_ppr": BASELINE_DIR / "adp_sf_half_ppr.csv",
+    "sf_ppr": BASELINE_DIR / "adp_sf_ppr.csv",
 }
 
 APP_VERSION = "0.1.0"
 REQUEST_TIMEOUT_SECONDS = 20
 ADP_CACHE_TTL_HOURS = 24
+BEATADP_PLATFORM_URL = "https://www.beatadp.com/platform-adp"
+BEATADP_SOURCE_NAME = "BeatADP Sleeper ADP"
+BEATADP_PARSER_VERSION = "beatadp-platform-adp-v1"
 FANTASYCALC_API_URL = "https://api.fantasycalc.com/values/current"
 FANTASYCALC_SOURCE_NAME = "FantasyCalc"
 FANTASYCALC_IS_DYNASTY = False

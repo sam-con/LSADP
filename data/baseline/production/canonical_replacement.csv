@@ -1,0 +1,25 @@
+position,method,replacement_rank,replacement_ppg,environment_key,replacement_method
+QB,Starter Demand Replacement,13,14.320159540932613,1qb_half_ppr,starter_demand
+RB,Starter Demand Replacement,32,7.097086916693396,1qb_half_ppr,starter_demand
+WR,Starter Demand Replacement,42,7.093508293363091,1qb_half_ppr,starter_demand
+TE,Starter Demand Replacement,13,6.629292529473277,1qb_half_ppr,starter_demand
+QB,Historical Roster Replacement,10,16.28842379943429,1qb_half_ppr,historical_roster
+RB,Historical Roster Replacement,23,9.281021024119376,1qb_half_ppr,historical_roster
+TE,Historical Roster Replacement,11,7.232712632057347,1qb_half_ppr,historical_roster
+WR,Historical Roster Replacement,31,8.658602937506627,1qb_half_ppr,historical_roster
+QB,Starter Demand Replacement,13,14.387076694816267,1qb_ppr,starter_demand
+RB,Starter Demand Replacement,31,8.044423749591251,1qb_ppr,starter_demand
+WR,Starter Demand Replacement,43,8.187331295250443,1qb_ppr,starter_demand
+TE,Starter Demand Replacement,13,8.258700026371802,1qb_ppr,starter_demand
+QB,Historical Roster Replacement,15,13.185473908631323,1qb_ppr,historical_roster
+RB,Historical Roster Replacement,26,9.33425682926741,1qb_ppr,historical_roster
+TE,Historical Roster Replacement,14,7.913459231612415,1qb_ppr,historical_roster
+WR,Historical Roster Replacement,36,9.322233576387937,1qb_ppr,historical_roster
+QB,Starter Demand Replacement,25,8.555059620349612,sf_half_ppr,starter_demand
+RB,Starter Demand Replacement,32,7.097086916693396,sf_half_ppr,starter_demand
+WR,Starter Demand Replacement,42,7.093508293363091,sf_half_ppr,starter_demand
+TE,Starter Demand Replacement,13,6.629292529473277,sf_half_ppr,starter_demand
+QB,Historical Roster Replacement,10,16.28842379943429,sf_half_ppr,historical_roster
+RB,Historical Roster Replacement,23,9.281021024119376,sf_half_ppr,historical_roster
+TE,Historical Roster Replacement,11,7.232712632057347,sf_half_ppr,historical_roster
+WR,Historical Roster Replacement,31,8.658602937506627,sf_half_ppr,historical_roster

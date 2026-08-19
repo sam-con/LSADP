@@ -125,17 +125,18 @@ def build_positional_impact_chart(summary: pd.DataFrame) -> go.Figure:
 
 
 def build_validation_scatter(predicted: pd.DataFrame, actual: pd.DataFrame, title: str) -> go.Figure:
-    merged = predicted.merge(actual[["player_name", "position", "adp"]], on=["player_name", "position"], how="inner")
+    actual_frame = actual[["player_name", "position", "adp"]].rename(columns={"adp": "actual_adp"})
+    merged = predicted.merge(actual_frame, on=["player_name", "position"], how="inner")
     figure = px.scatter(
         merged,
         x="league_adjusted_adp",
-        y="adp",
+        y="actual_adp",
         color="position",
         hover_name="player_name",
         title=title,
         template="plotly_white",
     )
-    max_value = float(max(merged["league_adjusted_adp"].max(), merged["adp"].max()))
+    max_value = float(max(merged["league_adjusted_adp"].max(), merged["actual_adp"].max()))
     figure.add_shape(type="line", x0=0, x1=max_value, y0=0, y1=max_value, line={"dash": "dash"})
     figure.update_xaxes(autorange="reversed", title="Predicted ADP")
     figure.update_yaxes(autorange="reversed", title="Actual ADP")

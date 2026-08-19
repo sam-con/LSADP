@@ -1,197 +1,134 @@
 # League-Specific ADP
 
-League-Specific ADP is a Streamlit app and research toolkit for turning today's market ADP into a Sleeper league-specific draft board.
+League-Specific ADP is a Streamlit app and research toolkit for turning a saved canonical ADP snapshot into a Sleeper league-specific draft board.
 
-The current production architecture is:
-
-```text
-Today's FantasyCalc ADP
-+ Saved calibrated structural model
-+ Target Sleeper league history/settings
-= League-specific ADP
-```
-
-FantasyCalc supplies the live market anchor. Sleeper supplies league settings plus four completed seasons of historical `players_points`. The saved model translates between them.
-
-## Core Idea
-
-The model does not try to re-rank players from scratch.
-
-It preserves what the market already knows about talent, role, risk, and sentiment, then adjusts only for how the target league changes positional production and scarcity.
-
-At a high level:
-
-1. Start from the closest canonical FantasyCalc market.
-2. Map ADP rank to positional production curves.
-3. Derive replacement levels and VORP from Sleeper history.
-4. Recompute the target league's positional scarcity.
-5. Apply only the model-derived value shift created by scoring, roster construction, and league size.
-
-## Production ADP Source
-
-Production now uses FantasyCalc instead of manually maintained ADP CSV files.
-
-The live endpoint used by the app is:
+## Current Architecture
 
 ```text
-https://api.fantasycalc.com/values/current
+Historical side
+
+donor_leagues / historical_donors_by_year
+        ->
+Sleeper historical players_points
+        ->
+Half-PPR / PPR production curves
+
+
+Market side
+
+BeatADP platform-adp
+        ->
+Sleeper ADP column only
+        ->
+Saved canonical ADP CSVs
+
+
+Model
+
+Historical production curves
+        +
+Canonical roster settings
+        ->
+Canonical VORP environments
+        ->
+Compare against saved BeatADP Sleeper ADPs
+        ->
+Select / validate transformation
+        ->
+Save production model
 ```
 
-The app queries it with:
+## Canonical ADP Source
+
+Canonical ADP now comes from BeatADP's Sleeper platform ADP page:
 
 ```text
-isDynasty=false
-includeAdp=true
-numQbs=1 or 2
-numTeams=<canonical team count>
-ppr=0 / 0.5 / 1
+https://www.beatadp.com/platform-adp
 ```
 
-As implemented on August 18, 2026, the provider was built against the current live response shape actually returned by the endpoint: a JSON array of player-ranking objects with nested `player` metadata, plus fields such as `overallRank`, `positionRank`, and `maybeAdp`.
+Only BeatADP's Sleeper ADP values are used. The app does not substitute:
 
-The normalized internal ADP frame contains:
+- BeatADP consensus ADP
+- ESPN ADP
+- FantasyPros ADP
+- table rank
+- positional rank
+- FantasyCalc rankings
 
-```text
-player_id
-sleeper_id
-player_name
-position
-team
-adp
-canonical_format
-source
-retrieved_at
-```
+FantasyCalc `overallRank` remains a diagnostic-only field in legacy code and is never treated as ADP.
 
-FantasyCalc Sleeper IDs are preferred over name matching.
+## Canonical Markets
 
-## Six Canonical Markets
+The system supports up to four canonical markets:
 
-The calibration process uses six canonical markets:
-
-- `1qb_standard`
 - `1qb_half_ppr`
 - `1qb_ppr`
-- `sf_standard`
 - `sf_half_ppr`
 - `sf_ppr`
 
-Parameter mapping:
+V1 calibration requires this minimum viable set:
+
+- `1qb_half_ppr`
+- `1qb_ppr`
+- `sf_half_ppr`
+
+If BeatADP does not expose `sf_ppr`, calibration still proceeds with those three markets. That yields:
+
+- 6 directed validations with 3 markets
+- 12 directed validations with 4 markets
+
+## Saved Canonical ADP Files
+
+BeatADP refresh writes canonical ADP snapshots to:
 
 ```text
-1QB Standard   -> numQbs=1, ppr=0
-1QB Half-PPR   -> numQbs=1, ppr=0.5
-1QB PPR        -> numQbs=1, ppr=1
-SF Standard    -> numQbs=2, ppr=0
-SF Half-PPR    -> numQbs=2, ppr=0.5
-SF PPR         -> numQbs=2, ppr=1
+data/baseline/adp_1qb_half_ppr.csv
+data/baseline/adp_1qb_ppr.csv
+data/baseline/adp_sf_half_ppr.csv
+data/baseline/adp_sf_ppr.csv
+data/baseline/adp_metadata.json
 ```
 
-`numQbs=2` is treated as the canonical Superflex / 2QB market. The app does not apply an extra arbitrary Superflex correction on top of that feed.
+`adp_sf_ppr.csv` exists only when BeatADP exposes that market.
 
-Canonical team count comes from the configured six Sleeper canonical leagues. The app validates that those six leagues share one calibration team count before using FantasyCalc live ADP for model building.
+The metadata file records:
 
-## Live ADP vs Structural Artifacts
-
-These are intentionally separate:
-
-### Live ADP
-
-- Comes from FantasyCalc
-- Refreshes approximately daily
-- Is not baked permanently into the saved structural model
-
-### Structural Model Artifacts
-
-- Positional production curves
-- Replacement methodology
-- VORP calibration
-- Selected transformation spec
-- Validation outputs
-
-These artifacts are rebuilt only from the hidden Development page when explicitly requested.
-
-## Daily FantasyCalc Cache
-
-FantasyCalc requests are persisted under:
-
-```text
-data/adp_cache/
-    1qb_standard.csv
-    1qb_half_ppr.csv
-    1qb_ppr.csv
-    sf_standard.csv
-    sf_half_ppr.csv
-    sf_ppr.csv
-    metadata.json
-```
-
-`metadata.json` stores source details such as:
-
-- last refresh time
-- endpoint used
-- parameters used
-- team count
+- source URL
+- fetch timestamp
+- available environments
+- missing environments
 - player counts
-- checksum
-- request diagnostics
+- matching diagnostics
+- parser version
+- validation details
 
-Cache behavior:
-
-1. If the cached copy is younger than 24 hours, use it.
-2. If it is stale, attempt one refresh.
-3. If refresh succeeds, persist the new copy.
-4. If refresh fails but a cached copy exists, fall back to cache and surface diagnostics.
-5. If refresh fails and no cache exists, fail clearly.
-
-The public UI never asks users to manage this cache. The hidden Development page exposes a manual `Refresh FantasyCalc ADP` action that bypasses the daily cache.
-
-## Missing ADP and Diagnostics
-
-The provider records:
-
-- duplicate Sleeper IDs
-- ambiguous name-only rows
-- missing positions
-- missing ADP values
-- per-market fallback usage
-
-During live implementation, some FantasyCalc redraft rows returned `maybeAdp` as null even with `includeAdp=true`. For those rows, the provider uses FantasyCalc `overallRank` as an explicit FantasyCalc-native fallback and exposes that in diagnostics rather than silently substituting another provider.
-
-The Development page also:
-
-- shows last refresh and cache age
-- shows player counts for all six markets
-- compares the six canonical feeds for suspicious similarity
-- lets you inspect one player across all six markets
-
-If supposedly different canonical markets appear effectively identical, candidate model calibration is blocked.
+The public app reads these saved files only. It does not scrape BeatADP live.
 
 ## Public Runtime
 
-Normal runtime behavior is:
+Normal runtime is:
 
 ```text
-Load saved production canonical model
-+ Load today's cached FantasyCalc canonical ADPs
-+ User enters Sleeper league ID
-+ Select nearest canonical anchor
-+ Load four completed Sleeper seasons
-+ Recompute target production curves and scarcity
-+ Transform today's FantasyCalc ADP
-= League-specific ADP
+Load production structural model
+        +
+Load saved BeatADP canonical ADP snapshot
+        +
+User enters Sleeper league ID
+        ->
+Choose nearest available canonical anchor
+        ->
+Load four completed Sleeper seasons
+        ->
+Recompute target production curves and scarcity
+        ->
+Transform canonical ADP into league-specific ADP
 ```
 
-Users do not need to:
-
-- upload ADP CSVs
-- pick an ADP provider
-- manually refresh ADP
-- configure FantasyCalc
+If a public target league is Superflex PPR but `sf_ppr` is unavailable, the runtime falls back explicitly to `sf_half_ppr` rather than crossing to a 1QB anchor.
 
 ## Development Workflow
 
-Enable the hidden Development page by setting:
+Enable the hidden Development page in `src/config.py`:
 
 ```python
 SHOW_DEVELOPMENT_PAGE = True
@@ -199,11 +136,12 @@ SHOW_DEVELOPMENT_PAGE = True
 
 From the Development page you can:
 
-- inspect FantasyCalc ADP status and freshness
-- force-refresh the FantasyCalc cache
-- build a candidate six-market model
+- refresh BeatADP canonical ADPs
+- inspect available canonical markets
+- validate historical donor leagues
+- build a candidate model
 - validate the candidate
-- promote a validated candidate to production
+- promote the candidate to production
 
 Candidate and production artifacts are saved under:
 
@@ -212,27 +150,15 @@ data/baseline/candidate/
 data/baseline/production/
 ```
 
-## CSV Support
-
-CSV ADP support still exists, but only as a debugging and test abstraction.
-
-`CSVADPProvider` remains useful for:
-
-- automated tests
-- reproducible local fixtures
-- controlled experiments
-
-Production no longer requires manually maintained ADP CSV files.
-
 ## Historical Data Constraints
 
-The modeling layer still enforces the original Sleeper-history rules:
+The historical side of the model is unchanged:
 
-- historical fantasy scoring comes from Sleeper `players_points`
-- the model uses the previous four completed NFL seasons
-- with the app date pinned to August 18, 2026, that window is `2022-2025`
+- historical scoring comes from Sleeper `players_points`
+- the app uses the previous four completed NFL seasons
+- with the app date pinned to August 19, 2026, that window is `2022-2025`
 - scoring must remain consistent across that window
-- sparse or malformed history fails clearly instead of guessing
+- sparse or malformed history fails clearly
 
 ## Testing
 
@@ -242,19 +168,20 @@ Run the suite with:
 python -m pytest -q
 ```
 
-The tests are fully mocked and do not require live FantasyCalc or live Sleeper access.
+The suite is mocked and does not require live BeatADP or live Sleeper access.
 
 Current coverage includes:
 
-- FantasyCalc parsing and parameter mapping
-- persistent cache behavior
-- canonical market distinctness checks
-- six-market model calibration
-- runtime use of updated FantasyCalc ADP without rebuilding structural artifacts
-- Sleeper history, curve fitting, replacement logic, transforms, and validation metrics
+- BeatADP parsing from saved HTML fixtures
+- rejection of missing Sleeper ADP values
+- no substitution from consensus or other columns
+- three-market and four-market calibration
+- dynamic validation counts
+- explicit Superflex fallback behavior
+- legacy guardrails that keep FantasyCalc rankings distinct from ADP
 
 ## Sources
 
+- BeatADP platform ADP page: https://www.beatadp.com/platform-adp
+- Sleeper API: https://docs.sleeper.com/
 - FantasyCalc homepage: https://fantasycalc.com/
-- FantasyCalc terms of usage: https://fantasycalc.com/terms-of-usage
-- FantasyCalc live endpoint used by the app: https://api.fantasycalc.com/values/current

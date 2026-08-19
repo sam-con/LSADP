@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-from src.adp import FantasyCalcADPProvider
+from src.adp import BeatADPProvider
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.canonical import CANONICAL_ENVIRONMENTS, CANONICAL_LABELS
 from src.charts import (
@@ -23,13 +22,8 @@ from src.charts import (
     build_validation_heatmap,
     build_validation_scatter,
 )
-from src.config import APP_VERSION, CANONICAL_LEAGUES, SHOW_DEVELOPMENT_PAGE
-from src.config import HISTORICAL_DONOR_FILE
-from src.donors import (
-    donor_matrix_summary,
-    load_saved_donor_configuration,
-    validate_historical_donor_configuration,
-)
+from src.config import APP_VERSION, CANONICAL_LEAGUES, HISTORICAL_DONOR_FILE, SHOW_DEVELOPMENT_PAGE
+from src.donors import donor_matrix_summary, validate_historical_donor_configuration
 from src.model_builder import (
     build_aggregated_positional_errors,
     build_candidate_model,
@@ -147,10 +141,9 @@ def cached_run_public_analysis(target_league_id: str) -> dict[str, Any]:
 
 @st.cache_data(show_spinner=False)
 def cached_build_candidate_model(canonical_leagues_json: str) -> dict[str, Any]:
-    canonical_leagues = json.loads(canonical_leagues_json)
     return build_candidate_model(
         client=SleeperClient(),
-        canonical_leagues=canonical_leagues,
+        canonical_leagues=json.loads(canonical_leagues_json),
         today=TODAY,
     )
 
@@ -164,9 +157,7 @@ def cached_validate_historical_donors(canonical_leagues_json: str) -> dict[str, 
     )
 
 
-def validate_historical_donors_live(
-    canonical_leagues_json: str,
-) -> dict[str, Any]:
+def validate_historical_donors_live(canonical_leagues_json: str) -> dict[str, Any]:
     return validate_historical_donor_configuration(
         client=SleeperClient(),
         canonical_leagues=json.loads(canonical_leagues_json),
@@ -175,14 +166,20 @@ def validate_historical_donors_live(
 
 
 def load_canonical_adp_status(canonical_leagues_json: str, *, force_refresh: bool = False) -> dict[str, Any]:
-    canonical_leagues = json.loads(canonical_leagues_json)
-    client = SleeperClient()
-    team_counts = {
-        environment_key: int(client.get_league(canonical_leagues[environment_key]).total_rosters)
-        for environment_key in CANONICAL_ENVIRONMENTS
-    }
-    bundle = FantasyCalcADPProvider().load_canonical_markets(team_counts, force_refresh=force_refresh)
-    bundle["market_distinctness"] = summarize_canonical_market_distinctness(bundle["frames"])
+    _ = canonical_leagues_json
+    provider = BeatADPProvider()
+    if force_refresh:
+        bundle = provider.load_canonical_markets(
+            force_refresh=True,
+            sleeper_players_payload=SleeperClient().get_players("nfl"),
+        )
+    else:
+        bundle = provider.load_canonical_markets(force_refresh=False)
+    bundle["market_distinctness"] = (
+        summarize_canonical_market_distinctness(bundle["frames"])
+        if len(bundle["frames"]) >= 2
+        else pd.DataFrame()
+    )
     return bundle
 
 
@@ -235,12 +232,18 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     adp_source_metadata = analysis.get("adp_source_metadata", {})
     selected_key = analysis["selected_canonical_key"]
     selected_label = analysis["selected_canonical_label"]
+    requested_label = analysis.get("requested_canonical_label", selected_label)
+    fallback_used = bool(analysis.get("selected_canonical_fallback"))
     canonical_config = artifacts.metadata["canonical_environments"][selected_key]
     target_league = target_environment["league"]
 
     st.subheader("League Settings")
     render_setting_cards(target_league)
     st.caption(f"Selected canonical anchor: {selected_label}")
+    if fallback_used:
+        st.info(
+            f"Closest exact market was {requested_label}, so the app anchored from {selected_label} because that is the nearest saved Superflex market available."
+        )
 
     differences = canonical_difference_frame(target_league, canonical_config)
     if not differences.empty:
@@ -251,7 +254,10 @@ def render_public_results(analysis: dict[str, Any]) -> None:
     metrics[0].metric("Players Modeled", len(results))
     metrics[1].metric("Canonical Anchor", selected_label)
     metrics[2].metric("Production Model", artifacts.metadata["selected_model_name"])
-    metrics[3].metric("FantasyCalc ADP", format_timestamp(adp_source_metadata.get("retrieved_at")))
+    metrics[3].metric(
+        "Canonical ADP Snapshot",
+        format_timestamp(adp_source_metadata.get("retrieved_at") or adp_source_metadata.get("recorded_at")),
+    )
 
     st.subheader("Adjusted Rankings")
     search = st.text_input("Search players", placeholder="Filter by player name or position")
@@ -372,20 +378,20 @@ def render_public_results(analysis: dict[str, Any]) -> None:
             {
                 "selected_canonical_key": selected_key,
                 "selected_canonical_label": selected_label,
+                "requested_canonical_label": requested_label,
+                "fallback_used": fallback_used,
                 "selected_model_name": artifacts.metadata["selected_model_name"],
                 "selected_metric_mode": artifacts.metadata["selected_metric_mode"],
                 "selected_replacement_method": artifacts.metadata["selected_replacement_method"],
                 "selected_utility_transform": artifacts.metadata["selected_utility_transform"],
                 "selected_weight_power": artifacts.metadata["selected_weight_power"],
-                "fantasycalc_status": adp_source_metadata.get("status"),
-                "fantasycalc_retrieved_at": adp_source_metadata.get("retrieved_at"),
-                "fantasycalc_request_note": adp_source_metadata.get("request_note"),
+                "canonical_adp_source": adp_source_metadata.get("source", "BeatADP Sleeper ADP"),
+                "canonical_adp_status": adp_source_metadata.get("status"),
+                "canonical_adp_recorded_at": adp_source_metadata.get("recorded_at"),
+                "canonical_adp_retrieved_at": adp_source_metadata.get("retrieved_at"),
             }
         )
-        st.caption(
-            "FantasyCalc `numQbs=2` is treated as the canonical Superflex / 2QB market. "
-            "No extra Superflex correction is layered on top of that feed."
-        )
+        st.caption("Public runtime reads the saved BeatADP Sleeper canonical snapshot from disk and does not scrape BeatADP live.")
         coverage_rows = [
             {
                 "season": item.season,
@@ -412,13 +418,12 @@ def render_public_page() -> None:
     except ConfigError as exc:
         st.error(str(exc))
         st.info(
-            "Configure the four canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
-            "needed, build a candidate model, and promote it to production. FantasyCalc ADP will refresh through "
-            "the daily cache."
+            "Configure the canonical Sleeper league IDs in `src/config.py`, refresh BeatADP canonical ADPs from the "
+            "Development page, build a candidate model, and promote it to production."
         )
         return
 
-    st.caption(f"Model version {APP_VERSION} • Production canonical model loaded from disk")
+    st.caption(f"Model version {APP_VERSION} | Production canonical model loaded from disk")
     st.write(
         {
             "production_model": production_artifacts.metadata["selected_model_name"],
@@ -442,16 +447,15 @@ def render_public_page() -> None:
                 return
         render_public_results(analysis)
     else:
-        st.info("Enter a Sleeper league ID and the app will anchor from the nearest cached FantasyCalc canonical market automatically.")
+        st.info("Enter a Sleeper league ID and the app will anchor from the nearest saved BeatADP Sleeper canonical market automatically.")
 
 
 def canonical_inputs() -> dict[str, str]:
     league_values: dict[str, str] = {}
     st.markdown("## Canonical Configuration")
     for environment_key in CANONICAL_ENVIRONMENTS:
-        label = CANONICAL_LABELS[environment_key]
         league_values[environment_key] = st.text_input(
-            f"{label} League ID",
+            f"{CANONICAL_LABELS[environment_key]} League ID",
             value=CANONICAL_LEAGUES.get(environment_key, ""),
             key=f"league_{environment_key}",
         )
@@ -461,15 +465,16 @@ def canonical_inputs() -> dict[str, str]:
 def canonical_adp_status_rows(status_bundle: dict[str, Any]) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for environment_key in CANONICAL_ENVIRONMENTS:
-        entry = status_bundle["formats"][environment_key]
+        entry = status_bundle["formats"].get(environment_key, {})
         rows.append(
             {
                 "Format": CANONICAL_LABELS[environment_key],
                 "Players": entry.get("player_count"),
-                "Updated": format_timestamp(entry.get("retrieved_at")),
-                "Status": entry.get("status"),
-                "Team Count": entry.get("team_count"),
-                "Fallback ADP Rows": entry.get("fallback_adp_count", 0),
+                "Recorded": format_timestamp(entry.get("recorded_at") or entry.get("retrieved_at")),
+                "Status": entry.get("status", "unavailable"),
+                "Matched": entry.get("matched_rows", entry.get("player_count")),
+                "Unmatched": entry.get("unmatched_rows", 0),
+                "Ambiguous": entry.get("ambiguous_rows", 0),
             }
         )
     return pd.DataFrame(rows)
@@ -477,18 +482,17 @@ def canonical_adp_status_rows(status_bundle: dict[str, Any]) -> pd.DataFrame:
 
 def player_market_lookup(status_bundle: dict[str, Any], player_name: str) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
-    for environment_key in CANONICAL_ENVIRONMENTS:
-        frame = status_bundle["frames"][environment_key]
+    for environment_key, frame in status_bundle["frames"].items():
         match = frame.loc[frame["player_name"] == player_name]
         adp_value = float(match.iloc[0]["adp"]) if not match.empty else None
         rows.append({"Format": CANONICAL_LABELS[environment_key], "ADP": adp_value})
     return pd.DataFrame(rows)
 
 
-def render_fantasycalc_section(canonical_leagues_json: str) -> None:
-    st.markdown("## FantasyCalc ADP")
+def render_beatadp_section(canonical_leagues_json: str) -> None:
+    st.markdown("## BeatADP Canonical ADP")
 
-    status_bundle = st.session_state.get("fantasycalc_status")
+    status_bundle = st.session_state.get("beatadp_status")
     if status_bundle is None:
         try:
             status_bundle = cached_canonical_adp_status(canonical_leagues_json)
@@ -496,64 +500,64 @@ def render_fantasycalc_section(canonical_leagues_json: str) -> None:
             st.error(str(exc))
             return
         except Exception as exc:  # noqa: BLE001
-            st.error(f"Unexpected FantasyCalc status failure: {exc}")
+            st.error(f"Unexpected BeatADP status failure: {exc}")
             return
 
     refresh_col, info_col = st.columns([1, 2])
-    if refresh_col.button("Refresh FantasyCalc ADP", use_container_width=True):
-        with st.spinner("Refreshing all four FantasyCalc canonical markets and updating the persistent cache..."):
+    if refresh_col.button("Refresh BeatADP Canonical ADPs", use_container_width=True):
+        with st.spinner("Fetching BeatADP, matching players, validating canonical markets, and saving ADP snapshots..."):
             try:
                 status_bundle = load_canonical_adp_status(canonical_leagues_json, force_refresh=True)
-                st.session_state["fantasycalc_status"] = status_bundle
+                st.session_state["beatadp_status"] = status_bundle
                 cached_canonical_adp_status.clear()
                 cached_build_candidate_model.clear()
                 cached_run_public_analysis.clear()
             except LSADPError as exc:
                 st.error(str(exc))
             except Exception as exc:  # noqa: BLE001
-                st.error(f"Unexpected FantasyCalc refresh failure: {exc}")
+                st.error(f"Unexpected BeatADP refresh failure: {exc}")
             else:
-                st.success("FantasyCalc cache refreshed.")
+                st.success("BeatADP canonical ADP snapshot refreshed.")
 
-    latest_status = status_bundle
-    canonical_team_count = latest_status.get("canonical_team_count", [])
-    canonical_team_display = canonical_team_count[0] if len(canonical_team_count) == 1 else ", ".join(map(str, canonical_team_count))
-    format_entries = list(latest_status["formats"].values())
-    max_age = max((entry.get("cache_age_hours") or 0.0) for entry in format_entries) if format_entries else 0.0
+    format_entries = list(status_bundle["formats"].values())
     total_players = sum(int(entry.get("player_count") or 0) for entry in format_entries)
     info_col.write(
         {
-            "provider": latest_status["source"],
-            "status": latest_status["status"],
-            "last_refresh": format_timestamp(latest_status.get("last_refresh")),
-            "cache_age_hours": round(max_age, 2),
-            "canonical_team_count": canonical_team_display,
+            "provider": status_bundle["source"],
+            "status": status_bundle["status"],
+            "last_refresh": format_timestamp(status_bundle.get("last_refresh")),
+            "available_environments": status_bundle.get("available_environments"),
+            "missing_environments": status_bundle.get("missing_environments"),
             "players_loaded": total_players,
         }
     )
-    info_col.caption(
-        "FantasyCalc `numQbs=2` is interpreted as the canonical Superflex / 2QB market. "
-        "Manual refresh bypasses the 24-hour cache only from this page."
-    )
+    info_col.caption("The Development page is the only place that fetches BeatADP live. The public app reads these saved files only.")
 
-    st.dataframe(canonical_adp_status_rows(latest_status), use_container_width=True, hide_index=True)
-
-    warnings = [entry.get("warning") for entry in format_entries if entry.get("warning")]
-    request_notes = [entry.get("request_note") for entry in format_entries if entry.get("request_note")]
-    if warnings:
-        st.warning(" | ".join(sorted(set(warnings))))
-    if request_notes:
-        st.info(" | ".join(sorted(set(request_notes))))
+    st.dataframe(canonical_adp_status_rows(status_bundle), use_container_width=True, hide_index=True)
 
     st.markdown("### Distinctness Check")
-    st.dataframe(latest_status["market_distinctness"], use_container_width=True, hide_index=True)
+    if status_bundle["market_distinctness"].empty:
+        st.info("Distinctness requires at least two saved canonical markets.")
+    else:
+        st.dataframe(status_bundle["market_distinctness"], use_container_width=True, hide_index=True)
 
-    all_players = sorted(
-        {player_name for frame in latest_status["frames"].values() for player_name in frame["player_name"].tolist()}
-    )
+    st.markdown("### Availability")
+    for environment_key in CANONICAL_ENVIRONMENTS:
+        label = CANONICAL_LABELS[environment_key]
+        available = environment_key in status_bundle.get("available_environments", [])
+        st.write(f"{label}: {'available' if available else 'unavailable'}")
+
+    all_players = sorted({player_name for frame in status_bundle["frames"].values() for player_name in frame["player_name"].tolist()})
     if all_players:
-        selected_player = st.selectbox("Inspect FantasyCalc player across all four markets", all_players, key="adp_player_lookup")
-        st.dataframe(player_market_lookup(latest_status, selected_player), use_container_width=True, hide_index=True)
+        selected_player = st.selectbox("Inspect BeatADP player across saved markets", all_players, key="adp_player_lookup")
+        st.dataframe(player_market_lookup(status_bundle, selected_player), use_container_width=True, hide_index=True)
+        first_environment_key = next(iter(status_bundle["frames"]))
+        st.markdown("### First 20 Rows")
+        st.dataframe(
+            status_bundle["frames"][first_environment_key][["player_name", "position", "team", "adp", "pos_rank"]].head(20),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def render_donor_validation_section(canonical_leagues_json: str) -> None:
@@ -577,7 +581,7 @@ def render_donor_validation_section(canonical_leagues_json: str) -> None:
         try:
             bundle = cached_validate_historical_donors(canonical_leagues_json)
             st.session_state["validated_donors"] = bundle
-            st.success("Historical donors reloaded from the configured CSV.")
+            st.success("Historical donors reloaded from the configured source.")
         except LSADPError as exc:
             st.error(str(exc))
         except Exception as exc:  # noqa: BLE001
@@ -665,19 +669,19 @@ def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
 
 def render_development_page() -> None:
     st.title("Development")
-    st.caption("Hidden model builder for four canonical Sleeper environments, donor-backed history, candidate comparison, and promotion.")
+    st.caption("Hidden model builder for donor-backed history, BeatADP Sleeper canonical ADPs, candidate comparison, and promotion.")
 
     canonical_leagues = canonical_inputs()
     leagues_json = json.dumps(canonical_leagues, sort_keys=True)
 
-    render_fantasycalc_section(leagues_json)
+    render_beatadp_section(leagues_json)
     render_donor_validation_section(leagues_json)
 
     st.markdown("## Model Builder")
     build_col, validate_col, promote_col = st.columns(3)
 
     if build_col.button("Build Candidate Model", type="primary", use_container_width=True):
-        with st.spinner("Loading four canonical leagues, validating donor history, fitting curves, calibrating specs, and saving the candidate..."):
+        with st.spinner("Loading active canonical leagues, validating donor history, fitting curves, calibrating specs, and saving the candidate..."):
             try:
                 bundle = cached_build_candidate_model(leagues_json)
                 save_candidate_model(CanonicalArtifactManager.candidate(), bundle)
@@ -720,6 +724,7 @@ def render_development_page() -> None:
                 "selected_utility_transform": candidate_artifacts.metadata["selected_utility_transform"],
                 "selected_weight_power": candidate_artifacts.metadata["selected_weight_power"],
                 "selected_model_score": candidate_artifacts.metadata["selected_model_score"],
+                "available_canonical_environments": candidate_artifacts.metadata.get("available_canonical_environments"),
             }
         )
         st.dataframe(candidate_artifacts.model_parameters, use_container_width=True, hide_index=True)
@@ -737,6 +742,7 @@ def render_development_page() -> None:
                 "selected_utility_transform": production_artifacts.metadata["selected_utility_transform"],
                 "selected_weight_power": production_artifacts.metadata["selected_weight_power"],
                 "selected_model_score": production_artifacts.metadata["selected_model_score"],
+                "available_canonical_environments": production_artifacts.metadata.get("available_canonical_environments"),
             }
         )
     except ConfigError as exc:
@@ -754,18 +760,18 @@ def render_public_page_live() -> None:
     except ConfigError as exc:
         st.error(str(exc))
         st.info(
-            "Configure the four canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
-            "needed, build a candidate model, and promote it to production. FantasyCalc ADP will refresh through "
-            "the daily cache."
+            "Configure the canonical Sleeper league IDs in `src/config.py`, refresh BeatADP canonical ADPs from the "
+            "Development page, build a candidate model, and promote it to production."
         )
         return
 
-    st.caption(f"Model version {APP_VERSION} | Production canonical model loaded from disk | FantasyCalc ADP cached separately")
+    st.caption(f"Model version {APP_VERSION} | Production canonical model loaded from disk | BeatADP canonical ADPs cached separately")
     st.write(
         {
             "production_model": production_artifacts.metadata["selected_model_name"],
             "selected_metric_mode": production_artifacts.metadata["selected_metric_mode"],
             "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
+            "available_canonical_environments": production_artifacts.metadata.get("available_canonical_environments"),
         }
     )
     league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID")
@@ -784,7 +790,7 @@ def render_public_page_live() -> None:
                 return
         render_public_results(analysis)
     else:
-        st.info("Enter a Sleeper league ID and the app will anchor from the nearest cached FantasyCalc canonical market automatically.")
+        st.info("Enter a Sleeper league ID and the app will anchor from the nearest saved BeatADP Sleeper canonical market automatically.")
 
 
 def main() -> None:

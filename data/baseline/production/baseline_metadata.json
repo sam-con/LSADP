@@ -1,0 +1,1806 @@
+{
+  "adp_snapshot": {
+    "available_environments": [
+      "1qb_half_ppr",
+      "1qb_ppr",
+      "sf_half_ppr"
+    ],
+    "canonical_team_count": 12,
+    "formats": {
+      "1qb_half_ppr": {
+        "ambiguous_rows": 0,
+        "checksum": "a99717ff2fd0dac7dc314982227697b62ab8fe703ccdef7c3ccce1b1cbe5d8db",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "1qb_half_ppr",
+        "matched_rows": 281,
+        "max_adp": 457.0,
+        "min_adp": 1.3,
+        "missing_sleeper_adp_rows": 171,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_half_ppr.csv",
+        "player_count": 281,
+        "raw_player_rows": 309,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "1QB",
+          "scoringFormat": "HALF_PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.3,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 2.6,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 3.8,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 4.1,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 5.6,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 6.5,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 7.5,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 8.0,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 8.3,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 10.2,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 11.5,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 12.2,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 13.5,
+            "player_name": "Saquon Barkley",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "PHI"
+          },
+          {
+            "adp": 14.5,
+            "player_name": "De'Von Achane",
+            "pos_rank": 8,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 15.6,
+            "player_name": "Omarion Hampton",
+            "pos_rank": 9,
+            "position": "RB",
+            "team": "LAC"
+          },
+          {
+            "adp": 16.1,
+            "player_name": "Chase Brown",
+            "pos_rank": 10,
+            "position": "RB",
+            "team": "CIN"
+          },
+          {
+            "adp": 17.1,
+            "player_name": "Derrick Henry",
+            "pos_rank": 11,
+            "position": "RB",
+            "team": "BAL"
+          },
+          {
+            "adp": 19.9,
+            "player_name": "Drake London",
+            "pos_rank": 7,
+            "position": "WR",
+            "team": "ATL"
+          },
+          {
+            "adp": 20.7,
+            "player_name": "A.J. Brown",
+            "pos_rank": 8,
+            "position": "WR",
+            "team": "NE"
+          },
+          {
+            "adp": 21.6,
+            "player_name": "Brock Bowers",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 309,
+        "status": "ok",
+        "unmatched_rows": 28,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 47,
+            "RB": 77,
+            "TE": 43,
+            "WR": 114
+          },
+          "reasonable_max_adp": false
+        }
+      },
+      "1qb_ppr": {
+        "ambiguous_rows": 0,
+        "checksum": "3492d8be7afcb6f9b86f7e85dbf6af279cf8638e0c0050507117800d3dd1f2cb",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "1qb_ppr",
+        "matched_rows": 251,
+        "max_adp": 396.0,
+        "min_adp": 1.4,
+        "missing_sleeper_adp_rows": 206,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_ppr.csv",
+        "player_count": 251,
+        "raw_player_rows": 274,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "1QB",
+          "scoringFormat": "PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.4,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 2.4,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 3.2,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 4.9,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 5.3,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 6.1,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 7.7,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 8.8,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 8.9,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 10.5,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 11.7,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 12.4,
+            "player_name": "De'Von Achane",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 13.7,
+            "player_name": "Saquon Barkley",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "PHI"
+          },
+          {
+            "adp": 14.9,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 8,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 15.3,
+            "player_name": "Drake London",
+            "pos_rank": 7,
+            "position": "WR",
+            "team": "ATL"
+          },
+          {
+            "adp": 16.0,
+            "player_name": "Omarion Hampton",
+            "pos_rank": 9,
+            "position": "RB",
+            "team": "LAC"
+          },
+          {
+            "adp": 17.3,
+            "player_name": "Chase Brown",
+            "pos_rank": 10,
+            "position": "RB",
+            "team": "CIN"
+          },
+          {
+            "adp": 17.6,
+            "player_name": "A.J. Brown",
+            "pos_rank": 8,
+            "position": "WR",
+            "team": "NE"
+          },
+          {
+            "adp": 19.2,
+            "player_name": "Trey McBride",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "ARI"
+          },
+          {
+            "adp": 21.0,
+            "player_name": "Brock Bowers",
+            "pos_rank": 2,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 275,
+        "status": "ok",
+        "unmatched_rows": 23,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 35,
+            "RB": 72,
+            "TE": 41,
+            "WR": 103
+          },
+          "reasonable_max_adp": true
+        }
+      },
+      "sf_half_ppr": {
+        "ambiguous_rows": 0,
+        "checksum": "a0f984165621e6e2bd3c75ac3560db71daf65fccd4b88e566e92c543a5a46aa5",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "sf_half_ppr",
+        "matched_rows": 299,
+        "max_adp": 440.5,
+        "min_adp": 1.9,
+        "missing_sleeper_adp_rows": 153,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_sf_half_ppr.csv",
+        "player_count": 299,
+        "raw_player_rows": 327,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "2QB",
+          "scoringFormat": "HALF_PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.9,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 2.3,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 3.8,
+            "player_name": "Josh Allen",
+            "pos_rank": 1,
+            "position": "QB",
+            "team": "BUF"
+          },
+          {
+            "adp": 4.1,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 5.4,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 6.5,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 7.7,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 8.5,
+            "player_name": "Drake Maye",
+            "pos_rank": 2,
+            "position": "QB",
+            "team": "NE"
+          },
+          {
+            "adp": 8.5,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 10.9,
+            "player_name": "Lamar Jackson",
+            "pos_rank": 3,
+            "position": "QB",
+            "team": "BAL"
+          },
+          {
+            "adp": 11.5,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 12.4,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 13.3,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 14.1,
+            "player_name": "Joe Burrow",
+            "pos_rank": 4,
+            "position": "QB",
+            "team": "CIN"
+          },
+          {
+            "adp": 15.7,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 16.8,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 17.1,
+            "player_name": "Trey McBride",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "ARI"
+          },
+          {
+            "adp": 17.3,
+            "player_name": "Jayden Daniels",
+            "pos_rank": 5,
+            "position": "QB",
+            "team": "WSH"
+          },
+          {
+            "adp": 19.1,
+            "player_name": "De'Von Achane",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 20.5,
+            "player_name": "Brock Bowers",
+            "pos_rank": 2,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 327,
+        "status": "ok",
+        "unmatched_rows": 28,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 54,
+            "RB": 81,
+            "TE": 50,
+            "WR": 114
+          },
+          "reasonable_max_adp": false
+        }
+      }
+    },
+    "last_refresh": "2026-08-19T04:34:26.895750+00:00",
+    "market_distinctness": [
+      {
+        "identical_share": 0.009389671361502348,
+        "left_environment": "1qb_half_ppr",
+        "matched_players": 213,
+        "max_absolute_diff": 192.0,
+        "mean_absolute_diff": 9.069953051643191,
+        "right_environment": "1qb_ppr",
+        "status": "Distinct"
+      },
+      {
+        "identical_share": 0.008888888888888889,
+        "left_environment": "1qb_half_ppr",
+        "matched_players": 225,
+        "max_absolute_diff": 215.2,
+        "mean_absolute_diff": 26.034666666666666,
+        "right_environment": "sf_half_ppr",
+        "status": "Distinct"
+      },
+      {
+        "identical_share": 0.0,
+        "left_environment": "1qb_ppr",
+        "matched_players": 228,
+        "max_absolute_diff": 122.39999999999998,
+        "mean_absolute_diff": 24.61052631578947,
+        "right_environment": "sf_half_ppr",
+        "status": "Distinct"
+      }
+    ],
+    "missing_environments": [
+      "sf_ppr"
+    ],
+    "source": "BeatADP Sleeper ADP",
+    "status": "Healthy",
+    "team_counts_by_environment": {
+      "1qb_half_ppr": 12,
+      "1qb_ppr": 12,
+      "sf_half_ppr": 12
+    }
+  },
+  "available_canonical_environments": [
+    "1qb_half_ppr",
+    "1qb_ppr",
+    "sf_half_ppr"
+  ],
+  "canonical_environments": {
+    "1qb_half_ppr": {
+      "adp_details": {
+        "ambiguous_rows": 0,
+        "checksum": "a99717ff2fd0dac7dc314982227697b62ab8fe703ccdef7c3ccce1b1cbe5d8db",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "1qb_half_ppr",
+        "matched_rows": 281,
+        "max_adp": 457.0,
+        "min_adp": 1.3,
+        "missing_sleeper_adp_rows": 171,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_half_ppr.csv",
+        "player_count": 281,
+        "raw_player_rows": 309,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "1QB",
+          "scoringFormat": "HALF_PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.3,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 2.6,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 3.8,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 4.1,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 5.6,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 6.5,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 7.5,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 8.0,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 8.3,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 10.2,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 11.5,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 12.2,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 13.5,
+            "player_name": "Saquon Barkley",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "PHI"
+          },
+          {
+            "adp": 14.5,
+            "player_name": "De'Von Achane",
+            "pos_rank": 8,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 15.6,
+            "player_name": "Omarion Hampton",
+            "pos_rank": 9,
+            "position": "RB",
+            "team": "LAC"
+          },
+          {
+            "adp": 16.1,
+            "player_name": "Chase Brown",
+            "pos_rank": 10,
+            "position": "RB",
+            "team": "CIN"
+          },
+          {
+            "adp": 17.1,
+            "player_name": "Derrick Henry",
+            "pos_rank": 11,
+            "position": "RB",
+            "team": "BAL"
+          },
+          {
+            "adp": 19.9,
+            "player_name": "Drake London",
+            "pos_rank": 7,
+            "position": "WR",
+            "team": "ATL"
+          },
+          {
+            "adp": 20.7,
+            "player_name": "A.J. Brown",
+            "pos_rank": 8,
+            "position": "WR",
+            "team": "NE"
+          },
+          {
+            "adp": 21.6,
+            "player_name": "Brock Bowers",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 309,
+        "status": "ok",
+        "unmatched_rows": 28,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 47,
+            "RB": 77,
+            "TE": 43,
+            "WR": 114
+          },
+          "reasonable_max_adp": false
+        }
+      },
+      "adp_path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_half_ppr.csv",
+      "adp_source": "BeatADP Sleeper ADP",
+      "label": "1QB Half-PPR",
+      "league_id": "1395457853489176576",
+      "roster_positions": [
+        "QB",
+        "RB",
+        "RB",
+        "WR",
+        "WR",
+        "TE",
+        "FLEX",
+        "FLEX",
+        "K",
+        "DEF",
+        "BN",
+        "BN",
+        "BN",
+        "BN",
+        "BN"
+      ],
+      "scoring_settings": {
+        "blk_kick": 2.0,
+        "blk_kick_ret_yd": 0.0,
+        "bonus_def_fum_td_50p": 0.0,
+        "bonus_def_int_td_50p": 0.0,
+        "bonus_fd_qb": 0.0,
+        "bonus_fd_rb": 0.0,
+        "bonus_fd_te": 0.0,
+        "bonus_fd_wr": 0.0,
+        "bonus_pass_cmp_25": 0.0,
+        "bonus_pass_yd_300": 0.0,
+        "bonus_pass_yd_400": 0.0,
+        "bonus_rec_rb": 0.0,
+        "bonus_rec_te": 0.0,
+        "bonus_rec_wr": 0.0,
+        "bonus_rec_yd_100": 0.0,
+        "bonus_rec_yd_200": 0.0,
+        "bonus_rush_att_20": 0.0,
+        "bonus_rush_rec_yd_100": 0.0,
+        "bonus_rush_rec_yd_200": 0.0,
+        "bonus_rush_td_qb": 0.0,
+        "bonus_rush_yd_100": 0.0,
+        "bonus_rush_yd_200": 0.0,
+        "bonus_sack_2p": 0.0,
+        "bonus_tkl_10p": 0.0,
+        "def_2pt": 0.0,
+        "def_3_and_out": 0.0,
+        "def_4_and_stop": 0.0,
+        "def_forced_punts": 0.0,
+        "def_kr_yd": 0.0,
+        "def_pass_def": 0.0,
+        "def_pr_yd": 0.0,
+        "def_st_ff": 1.0,
+        "def_st_fum_rec": 1.0,
+        "def_st_td": 6.0,
+        "def_st_tkl_solo": 0.0,
+        "def_td": 6.0,
+        "ff": 1.0,
+        "fg_ret_yd": 0.0,
+        "fgm": 0.0,
+        "fgm_0_19": 3.0,
+        "fgm_20_29": 3.0,
+        "fgm_30_39": 3.0,
+        "fgm_40_49": 4.0,
+        "fgm_50_59": 5.0,
+        "fgm_50p": 0.0,
+        "fgm_60p": 6.0,
+        "fgm_yds": 0.0,
+        "fgm_yds_over_30": 0.0,
+        "fgmiss": -1.0,
+        "fgmiss_0_19": 0.0,
+        "fgmiss_20_29": 0.0,
+        "fgmiss_30_39": 0.0,
+        "fgmiss_40_49": 0.0,
+        "fgmiss_50_59": 0.0,
+        "fgmiss_50p": 0.0,
+        "fgmiss_60p": 0.0,
+        "fum": 0.0,
+        "fum_lost": -2.0,
+        "fum_rec": 2.0,
+        "fum_rec_td": 6.0,
+        "fum_ret_yd": 0.0,
+        "idp_blk_kick": 0.0,
+        "idp_def_td": 0.0,
+        "idp_ff": 0.0,
+        "idp_fum_rec": 0.0,
+        "idp_fum_ret_yd": 0.0,
+        "idp_int": 0.0,
+        "idp_int_ret_yd": 0.0,
+        "idp_pass_def": 0.0,
+        "idp_pass_def_3p": 0.0,
+        "idp_qb_hit": 0.0,
+        "idp_sack": 0.0,
+        "idp_sack_yd": 0.0,
+        "idp_safe": 0.0,
+        "idp_tkl": 0.0,
+        "idp_tkl_ast": 0.0,
+        "idp_tkl_loss": 0.0,
+        "idp_tkl_solo": 0.0,
+        "int": 2.0,
+        "int_ret_yd": 0.0,
+        "kr_yd": 0.0,
+        "pass_2pt": 2.0,
+        "pass_att": 0.0,
+        "pass_cmp": 0.0,
+        "pass_cmp_40p": 0.0,
+        "pass_fd": 0.0,
+        "pass_inc": 0.0,
+        "pass_int": -1.0,
+        "pass_int_td": 0.0,
+        "pass_sack": 0.0,
+        "pass_td": 4.0,
+        "pass_td_40p": 0.0,
+        "pass_td_50p": 0.0,
+        "pass_yd": 0.04,
+        "pr_yd": 0.0,
+        "pts_allow": 0.0,
+        "pts_allow_0": 10.0,
+        "pts_allow_14_20": 1.0,
+        "pts_allow_1_6": 7.0,
+        "pts_allow_21_27": 0.0,
+        "pts_allow_28_34": -1.0,
+        "pts_allow_35p": -4.0,
+        "pts_allow_7_13": 4.0,
+        "qb_hit": 0.0,
+        "rec": 0.5,
+        "rec_0_4": 0.0,
+        "rec_10_19": 0.0,
+        "rec_20_29": 0.0,
+        "rec_2pt": 2.0,
+        "rec_30_39": 0.0,
+        "rec_40p": 0.0,
+        "rec_5_9": 0.0,
+        "rec_fd": 0.0,
+        "rec_td": 6.0,
+        "rec_td_40p": 0.0,
+        "rec_td_50p": 0.0,
+        "rec_yd": 0.1,
+        "rush_2pt": 2.0,
+        "rush_40p": 0.0,
+        "rush_att": 0.0,
+        "rush_fd": 0.0,
+        "rush_td": 6.0,
+        "rush_td_40p": 0.0,
+        "rush_td_50p": 0.0,
+        "rush_yd": 0.1,
+        "sack": 1.0,
+        "sack_yd": 0.0,
+        "safe": 2.0,
+        "st_ff": 1.0,
+        "st_fum_rec": 1.0,
+        "st_td": 6.0,
+        "st_tkl_solo": 0.0,
+        "tkl": 0.0,
+        "tkl_ast": 0.0,
+        "tkl_loss": 0.0,
+        "tkl_solo": 0.0,
+        "xpm": 1.0,
+        "xpmiss": -1.0,
+        "yds_allow": 0.0,
+        "yds_allow_0_100": 0.0,
+        "yds_allow_100_199": 0.0,
+        "yds_allow_200_299": 0.0,
+        "yds_allow_300_349": 0.0,
+        "yds_allow_350_399": 0.0,
+        "yds_allow_400_449": 0.0,
+        "yds_allow_450_499": 0.0,
+        "yds_allow_500_549": 0.0,
+        "yds_allow_550p": 0.0
+      },
+      "team_count": 12
+    },
+    "1qb_ppr": {
+      "adp_details": {
+        "ambiguous_rows": 0,
+        "checksum": "3492d8be7afcb6f9b86f7e85dbf6af279cf8638e0c0050507117800d3dd1f2cb",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "1qb_ppr",
+        "matched_rows": 251,
+        "max_adp": 396.0,
+        "min_adp": 1.4,
+        "missing_sleeper_adp_rows": 206,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_ppr.csv",
+        "player_count": 251,
+        "raw_player_rows": 274,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "1QB",
+          "scoringFormat": "PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.4,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 2.4,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 3.2,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 4.9,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 5.3,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 6.1,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 7.7,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 8.8,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 8.9,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 10.5,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 11.7,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 12.4,
+            "player_name": "De'Von Achane",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 13.7,
+            "player_name": "Saquon Barkley",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "PHI"
+          },
+          {
+            "adp": 14.9,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 8,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 15.3,
+            "player_name": "Drake London",
+            "pos_rank": 7,
+            "position": "WR",
+            "team": "ATL"
+          },
+          {
+            "adp": 16.0,
+            "player_name": "Omarion Hampton",
+            "pos_rank": 9,
+            "position": "RB",
+            "team": "LAC"
+          },
+          {
+            "adp": 17.3,
+            "player_name": "Chase Brown",
+            "pos_rank": 10,
+            "position": "RB",
+            "team": "CIN"
+          },
+          {
+            "adp": 17.6,
+            "player_name": "A.J. Brown",
+            "pos_rank": 8,
+            "position": "WR",
+            "team": "NE"
+          },
+          {
+            "adp": 19.2,
+            "player_name": "Trey McBride",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "ARI"
+          },
+          {
+            "adp": 21.0,
+            "player_name": "Brock Bowers",
+            "pos_rank": 2,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 275,
+        "status": "ok",
+        "unmatched_rows": 23,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 35,
+            "RB": 72,
+            "TE": 41,
+            "WR": 103
+          },
+          "reasonable_max_adp": true
+        }
+      },
+      "adp_path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_ppr.csv",
+      "adp_source": "BeatADP Sleeper ADP",
+      "label": "1QB PPR",
+      "league_id": "1395452196744622080",
+      "roster_positions": [
+        "QB",
+        "RB",
+        "RB",
+        "WR",
+        "WR",
+        "TE",
+        "FLEX",
+        "FLEX",
+        "K",
+        "DEF",
+        "BN",
+        "BN",
+        "BN",
+        "BN",
+        "BN"
+      ],
+      "scoring_settings": {
+        "blk_kick": 2.0,
+        "def_st_ff": 1.0,
+        "def_st_fum_rec": 1.0,
+        "def_st_td": 6.0,
+        "def_td": 6.0,
+        "ff": 1.0,
+        "fgm_0_19": 3.0,
+        "fgm_20_29": 3.0,
+        "fgm_30_39": 3.0,
+        "fgm_40_49": 4.0,
+        "fgm_50_59": 5.0,
+        "fgm_60p": 6.0,
+        "fgmiss": -1.0,
+        "fum": 0.0,
+        "fum_lost": -2.0,
+        "fum_rec": 2.0,
+        "fum_rec_td": 6.0,
+        "int": 2.0,
+        "pass_2pt": 2.0,
+        "pass_int": -1.0,
+        "pass_td": 4.0,
+        "pass_yd": 0.04,
+        "pts_allow_0": 10.0,
+        "pts_allow_14_20": 1.0,
+        "pts_allow_1_6": 7.0,
+        "pts_allow_21_27": 0.0,
+        "pts_allow_28_34": -1.0,
+        "pts_allow_35p": -4.0,
+        "pts_allow_7_13": 4.0,
+        "rec": 1.0,
+        "rec_2pt": 2.0,
+        "rec_td": 6.0,
+        "rec_yd": 0.1,
+        "rush_2pt": 2.0,
+        "rush_td": 6.0,
+        "rush_yd": 0.1,
+        "sack": 1.0,
+        "safe": 2.0,
+        "st_ff": 1.0,
+        "st_fum_rec": 1.0,
+        "st_td": 6.0,
+        "xpm": 1.0,
+        "xpmiss": -1.0
+      },
+      "team_count": 12
+    },
+    "sf_half_ppr": {
+      "adp_details": {
+        "ambiguous_rows": 0,
+        "checksum": "a0f984165621e6e2bd3c75ac3560db71daf65fccd4b88e566e92c543a5a46aa5",
+        "duplicate_player_ids": [],
+        "duplicate_rows": 0,
+        "label": "sf_half_ppr",
+        "matched_rows": 299,
+        "max_adp": 440.5,
+        "min_adp": 1.9,
+        "missing_sleeper_adp_rows": 153,
+        "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_sf_half_ppr.csv",
+        "player_count": 299,
+        "raw_player_rows": 327,
+        "recorded_at": "2026-08-15",
+        "request_state": {
+          "draftType": "REDRAFT",
+          "platform": "SLEEPER",
+          "qbType": "2QB",
+          "scoringFormat": "HALF_PPR"
+        },
+        "request_url": "https://www.beatadp.com/platform-adp",
+        "sample_rows": [
+          {
+            "adp": 1.9,
+            "player_name": "Bijan Robinson",
+            "pos_rank": 1,
+            "position": "RB",
+            "team": "ATL"
+          },
+          {
+            "adp": 2.3,
+            "player_name": "Jahmyr Gibbs",
+            "pos_rank": 2,
+            "position": "RB",
+            "team": "DET"
+          },
+          {
+            "adp": 3.8,
+            "player_name": "Josh Allen",
+            "pos_rank": 1,
+            "position": "QB",
+            "team": "BUF"
+          },
+          {
+            "adp": 4.1,
+            "player_name": "Ja'Marr Chase",
+            "pos_rank": 1,
+            "position": "WR",
+            "team": "CIN"
+          },
+          {
+            "adp": 5.4,
+            "player_name": "Puka Nacua",
+            "pos_rank": 2,
+            "position": "WR",
+            "team": "LAR"
+          },
+          {
+            "adp": 6.5,
+            "player_name": "Jaxon Smith-Njigba",
+            "pos_rank": 3,
+            "position": "WR",
+            "team": "SEA"
+          },
+          {
+            "adp": 7.7,
+            "player_name": "Christian McCaffrey",
+            "pos_rank": 3,
+            "position": "RB",
+            "team": "SF"
+          },
+          {
+            "adp": 8.5,
+            "player_name": "Drake Maye",
+            "pos_rank": 2,
+            "position": "QB",
+            "team": "NE"
+          },
+          {
+            "adp": 8.5,
+            "player_name": "Jonathan Taylor",
+            "pos_rank": 4,
+            "position": "RB",
+            "team": "IND"
+          },
+          {
+            "adp": 10.9,
+            "player_name": "Lamar Jackson",
+            "pos_rank": 3,
+            "position": "QB",
+            "team": "BAL"
+          },
+          {
+            "adp": 11.5,
+            "player_name": "Amon-Ra St. Brown",
+            "pos_rank": 4,
+            "position": "WR",
+            "team": "DET"
+          },
+          {
+            "adp": 12.4,
+            "player_name": "James Cook",
+            "pos_rank": 5,
+            "position": "RB",
+            "team": "BUF"
+          },
+          {
+            "adp": 13.3,
+            "player_name": "CeeDee Lamb",
+            "pos_rank": 5,
+            "position": "WR",
+            "team": "DAL"
+          },
+          {
+            "adp": 14.1,
+            "player_name": "Joe Burrow",
+            "pos_rank": 4,
+            "position": "QB",
+            "team": "CIN"
+          },
+          {
+            "adp": 15.7,
+            "player_name": "Justin Jefferson",
+            "pos_rank": 6,
+            "position": "WR",
+            "team": "MIN"
+          },
+          {
+            "adp": 16.8,
+            "player_name": "Ashton Jeanty",
+            "pos_rank": 6,
+            "position": "RB",
+            "team": "LV"
+          },
+          {
+            "adp": 17.1,
+            "player_name": "Trey McBride",
+            "pos_rank": 1,
+            "position": "TE",
+            "team": "ARI"
+          },
+          {
+            "adp": 17.3,
+            "player_name": "Jayden Daniels",
+            "pos_rank": 5,
+            "position": "QB",
+            "team": "WSH"
+          },
+          {
+            "adp": 19.1,
+            "player_name": "De'Von Achane",
+            "pos_rank": 7,
+            "position": "RB",
+            "team": "MIA"
+          },
+          {
+            "adp": 20.5,
+            "player_name": "Brock Bowers",
+            "pos_rank": 2,
+            "position": "TE",
+            "team": "LV"
+          }
+        ],
+        "slice_player_count": 327,
+        "status": "ok",
+        "unmatched_rows": 28,
+        "validation": {
+          "duplicate_player_rows": false,
+          "numeric_adp": true,
+          "position_coverage": {
+            "QB": 54,
+            "RB": 81,
+            "TE": 50,
+            "WR": 114
+          },
+          "reasonable_max_adp": false
+        }
+      },
+      "adp_path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_sf_half_ppr.csv",
+      "adp_source": "BeatADP Sleeper ADP",
+      "label": "Superflex Half-PPR",
+      "league_id": "1395457206857515008",
+      "roster_positions": [
+        "QB",
+        "RB",
+        "RB",
+        "WR",
+        "WR",
+        "TE",
+        "FLEX",
+        "FLEX",
+        "SUPER_FLEX",
+        "K",
+        "DEF",
+        "BN",
+        "BN",
+        "BN",
+        "BN",
+        "BN"
+      ],
+      "scoring_settings": {
+        "blk_kick": 2.0,
+        "blk_kick_ret_yd": 0.0,
+        "bonus_def_fum_td_50p": 0.0,
+        "bonus_def_int_td_50p": 0.0,
+        "bonus_fd_qb": 0.0,
+        "bonus_fd_rb": 0.0,
+        "bonus_fd_te": 0.0,
+        "bonus_fd_wr": 0.0,
+        "bonus_pass_cmp_25": 0.0,
+        "bonus_pass_yd_300": 0.0,
+        "bonus_pass_yd_400": 0.0,
+        "bonus_rec_rb": 0.0,
+        "bonus_rec_te": 0.0,
+        "bonus_rec_wr": 0.0,
+        "bonus_rec_yd_100": 0.0,
+        "bonus_rec_yd_200": 0.0,
+        "bonus_rush_att_20": 0.0,
+        "bonus_rush_rec_yd_100": 0.0,
+        "bonus_rush_rec_yd_200": 0.0,
+        "bonus_rush_td_qb": 0.0,
+        "bonus_rush_yd_100": 0.0,
+        "bonus_rush_yd_200": 0.0,
+        "bonus_sack_2p": 0.0,
+        "bonus_tkl_10p": 0.0,
+        "def_2pt": 0.0,
+        "def_3_and_out": 0.0,
+        "def_4_and_stop": 0.0,
+        "def_forced_punts": 0.0,
+        "def_kr_yd": 0.0,
+        "def_pass_def": 0.0,
+        "def_pr_yd": 0.0,
+        "def_st_ff": 1.0,
+        "def_st_fum_rec": 1.0,
+        "def_st_td": 6.0,
+        "def_st_tkl_solo": 0.0,
+        "def_td": 6.0,
+        "ff": 1.0,
+        "fg_ret_yd": 0.0,
+        "fgm": 0.0,
+        "fgm_0_19": 3.0,
+        "fgm_20_29": 3.0,
+        "fgm_30_39": 3.0,
+        "fgm_40_49": 4.0,
+        "fgm_50_59": 5.0,
+        "fgm_50p": 0.0,
+        "fgm_60p": 6.0,
+        "fgm_yds": 0.0,
+        "fgm_yds_over_30": 0.0,
+        "fgmiss": -1.0,
+        "fgmiss_0_19": 0.0,
+        "fgmiss_20_29": 0.0,
+        "fgmiss_30_39": 0.0,
+        "fgmiss_40_49": 0.0,
+        "fgmiss_50_59": 0.0,
+        "fgmiss_50p": 0.0,
+        "fgmiss_60p": 0.0,
+        "fum": 0.0,
+        "fum_lost": -2.0,
+        "fum_rec": 2.0,
+        "fum_rec_td": 6.0,
+        "fum_ret_yd": 0.0,
+        "idp_blk_kick": 0.0,
+        "idp_def_td": 0.0,
+        "idp_ff": 0.0,
+        "idp_fum_rec": 0.0,
+        "idp_fum_ret_yd": 0.0,
+        "idp_int": 0.0,
+        "idp_int_ret_yd": 0.0,
+        "idp_pass_def": 0.0,
+        "idp_pass_def_3p": 0.0,
+        "idp_qb_hit": 0.0,
+        "idp_sack": 0.0,
+        "idp_sack_yd": 0.0,
+        "idp_safe": 0.0,
+        "idp_tkl": 0.0,
+        "idp_tkl_ast": 0.0,
+        "idp_tkl_loss": 0.0,
+        "idp_tkl_solo": 0.0,
+        "int": 2.0,
+        "int_ret_yd": 0.0,
+        "kr_yd": 0.0,
+        "pass_2pt": 2.0,
+        "pass_att": 0.0,
+        "pass_cmp": 0.0,
+        "pass_cmp_40p": 0.0,
+        "pass_fd": 0.0,
+        "pass_inc": 0.0,
+        "pass_int": -1.0,
+        "pass_int_td": 0.0,
+        "pass_sack": 0.0,
+        "pass_td": 4.0,
+        "pass_td_40p": 0.0,
+        "pass_td_50p": 0.0,
+        "pass_yd": 0.04,
+        "pr_yd": 0.0,
+        "pts_allow": 0.0,
+        "pts_allow_0": 10.0,
+        "pts_allow_14_20": 1.0,
+        "pts_allow_1_6": 7.0,
+        "pts_allow_21_27": 0.0,
+        "pts_allow_28_34": -1.0,
+        "pts_allow_35p": -4.0,
+        "pts_allow_7_13": 4.0,
+        "qb_hit": 0.0,
+        "rec": 0.5,
+        "rec_0_4": 0.0,
+        "rec_10_19": 0.0,
+        "rec_20_29": 0.0,
+        "rec_2pt": 2.0,
+        "rec_30_39": 0.0,
+        "rec_40p": 0.0,
+        "rec_5_9": 0.0,
+        "rec_fd": 0.0,
+        "rec_td": 6.0,
+        "rec_td_40p": 0.0,
+        "rec_td_50p": 0.0,
+        "rec_yd": 0.1,
+        "rush_2pt": 2.0,
+        "rush_40p": 0.0,
+        "rush_att": 0.0,
+        "rush_fd": 0.0,
+        "rush_td": 6.0,
+        "rush_td_40p": 0.0,
+        "rush_td_50p": 0.0,
+        "rush_yd": 0.1,
+        "sack": 1.0,
+        "sack_yd": 0.0,
+        "safe": 2.0,
+        "st_ff": 1.0,
+        "st_fum_rec": 1.0,
+        "st_td": 6.0,
+        "st_tkl_solo": 0.0,
+        "tkl": 0.0,
+        "tkl_ast": 0.0,
+        "tkl_loss": 0.0,
+        "tkl_solo": 0.0,
+        "xpm": 1.0,
+        "xpmiss": -1.0,
+        "yds_allow": 0.0,
+        "yds_allow_0_100": 0.0,
+        "yds_allow_100_199": 0.0,
+        "yds_allow_200_299": 0.0,
+        "yds_allow_300_349": 0.0,
+        "yds_allow_350_399": 0.0,
+        "yds_allow_400_449": 0.0,
+        "yds_allow_450_499": 0.0,
+        "yds_allow_500_549": 0.0,
+        "yds_allow_550p": 0.0
+      },
+      "team_count": 12
+    }
+  },
+  "generated_timestamp": "2026-08-19T04:39:33.341394+00:00",
+  "historical_donor_source": {
+    "league_records": [
+      {
+        "league_id": "784434023157075968",
+        "scoring_format": "half_ppr",
+        "season": 2022,
+        "unique_players": 422,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "917970344462954496",
+        "scoring_format": "half_ppr",
+        "season": 2023,
+        "unique_players": 401,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "1048363806625214464",
+        "scoring_format": "half_ppr",
+        "season": 2024,
+        "unique_players": 387,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "1257418138954240000",
+        "scoring_format": "half_ppr",
+        "season": 2025,
+        "unique_players": 310,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "833859421934288896",
+        "scoring_format": "ppr",
+        "season": 2022,
+        "unique_players": 441,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "916510130160635904",
+        "scoring_format": "ppr",
+        "season": 2023,
+        "unique_players": 394,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "1067919665374113792",
+        "scoring_format": "ppr",
+        "season": 2024,
+        "unique_players": 381,
+        "weeks_loaded": 14
+      },
+      {
+        "league_id": "1205017004218519552",
+        "scoring_format": "ppr",
+        "season": 2025,
+        "unique_players": 363,
+        "weeks_loaded": 14
+      }
+    ],
+    "source": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\historical_donors_by_year.json",
+    "validation": [
+      {
+        "discovered_from_user_id": null,
+        "league_id": "784434023157075968",
+        "league_name": "Armchair Football League",
+        "qb_coverage": 49,
+        "quality_score": 347.15,
+        "rb_coverage": 113,
+        "reason": "Good coverage",
+        "scoring_format": "half_ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":0.5,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2022,
+        "selected": true,
+        "source_row": 2,
+        "status": "accepted",
+        "te_coverage": 56,
+        "team_count": 12,
+        "unique_player_weeks": 4881,
+        "unique_players": 422,
+        "weeks_loaded": 14,
+        "wr_coverage": 156
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "833859421934288896",
+        "league_name": "The Franchise",
+        "qb_coverage": 58,
+        "quality_score": 392.15,
+        "rb_coverage": 129,
+        "reason": "Good coverage",
+        "scoring_format": "ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":1.0,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2022,
+        "selected": true,
+        "source_row": 3,
+        "status": "accepted",
+        "te_coverage": 64,
+        "team_count": 12,
+        "unique_player_weeks": 5569,
+        "unique_players": 441,
+        "weeks_loaded": 14,
+        "wr_coverage": 164
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "917970344462954496",
+        "league_name": "Armchair Football League",
+        "qb_coverage": 52,
+        "quality_score": 345.6,
+        "rb_coverage": 121,
+        "reason": "Good coverage",
+        "scoring_format": "half_ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":0.5,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2023,
+        "selected": true,
+        "source_row": 4,
+        "status": "accepted",
+        "te_coverage": 51,
+        "team_count": 12,
+        "unique_player_weeks": 4858,
+        "unique_players": 401,
+        "weeks_loaded": 14,
+        "wr_coverage": 148
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "916510130160635904",
+        "league_name": "Superflex Dynasty\ud83d\udd25",
+        "qb_coverage": 61,
+        "quality_score": 353.65,
+        "rb_coverage": 113,
+        "reason": "Good coverage",
+        "scoring_format": "ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":1.0,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2023,
+        "selected": true,
+        "source_row": 5,
+        "status": "accepted",
+        "te_coverage": 55,
+        "team_count": 12,
+        "unique_player_weeks": 5003,
+        "unique_players": 394,
+        "weeks_loaded": 14,
+        "wr_coverage": 150
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "1048363806625214464",
+        "league_name": "Armchair Football League",
+        "qb_coverage": 46,
+        "quality_score": 334.15,
+        "rb_coverage": 108,
+        "reason": "Good coverage",
+        "scoring_format": "half_ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":0.5,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2024,
+        "selected": true,
+        "source_row": 6,
+        "status": "accepted",
+        "te_coverage": 52,
+        "team_count": 12,
+        "unique_player_weeks": 4721,
+        "unique_players": 387,
+        "weeks_loaded": 14,
+        "wr_coverage": 149
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "1067919665374113792",
+        "league_name": "Dynasty 24",
+        "qb_coverage": 64,
+        "quality_score": 339.2,
+        "rb_coverage": 100,
+        "reason": "Good coverage",
+        "scoring_format": "ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":1.0,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2024,
+        "selected": true,
+        "source_row": 7,
+        "status": "accepted",
+        "te_coverage": 57,
+        "team_count": 12,
+        "unique_player_weeks": 4814,
+        "unique_players": 381,
+        "weeks_loaded": 14,
+        "wr_coverage": 143
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "1257418138954240000",
+        "league_name": "Across the Pond",
+        "qb_coverage": 38,
+        "quality_score": 261.2,
+        "rb_coverage": 92,
+        "reason": "Good coverage",
+        "scoring_format": "half_ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":0.5,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2025,
+        "selected": true,
+        "source_row": 8,
+        "status": "accepted",
+        "te_coverage": 41,
+        "team_count": 10,
+        "unique_player_weeks": 3650,
+        "unique_players": 310,
+        "weeks_loaded": 14,
+        "wr_coverage": 113
+      },
+      {
+        "discovered_from_user_id": null,
+        "league_id": "1205017004218519552",
+        "league_name": "Dynasty Bestball SF",
+        "qb_coverage": 53,
+        "quality_score": 319.5,
+        "rb_coverage": 99,
+        "reason": "Good coverage",
+        "scoring_format": "ppr",
+        "scoring_signature": "{\"fum_lost\":-2.0,\"pass_2pt\":2.0,\"pass_int\":-1.0,\"pass_td\":4.0,\"pass_yd\":0.04,\"rec\":1.0,\"rec_2pt\":2.0,\"rec_td\":6.0,\"rec_yd\":0.1,\"rush_2pt\":2.0,\"rush_td\":6.0,\"rush_yd\":0.1}",
+        "season": 2025,
+        "selected": true,
+        "source_row": 9,
+        "status": "accepted",
+        "te_coverage": 52,
+        "team_count": 12,
+        "unique_player_weeks": 4520,
+        "unique_players": 363,
+        "weeks_loaded": 14,
+        "wr_coverage": 138
+      }
+    ]
+  },
+  "historical_seasons": {
+    "1qb_half_ppr": [
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "1qb_ppr": [
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "sf_half_ppr": [
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "model_version": "0.1.0",
+  "selected_metric_mode": "vorp",
+  "selected_model_name": "Curve + Starter VORP",
+  "selected_model_score": 11.399196283577126,
+  "selected_replacement_method": "starter_demand",
+  "selected_spec_id": "spec_03",
+  "selected_utility_transform": "neg_log",
+  "selected_weight_power": 1.0,
+  "validation_complete": true
+}

@@ -7,17 +7,28 @@ from src.canonical import (
     classify_transformation_type,
     directed_transform_pairs,
     validate_canonical_configuration,
+    validate_canonical_environment_keys,
 )
 from src.models import ConfigError
 from src.sleeper import parse_league_settings
 
 
-def test_all_four_canonical_environments_are_required(canonical_adp_paths) -> None:
+def test_all_four_canonical_environments_are_required_by_default(canonical_adp_paths) -> None:
     incomplete = {
         "1qb_half_ppr": "half2026",
     }
     with pytest.raises(ConfigError):
         validate_canonical_configuration(incomplete, canonical_adp_paths)
+
+
+def test_active_environment_validation_accepts_minimum_viable_three_market_set() -> None:
+    ordered = validate_canonical_environment_keys(("1qb_half_ppr", "1qb_ppr", "sf_half_ppr"))
+    assert ordered == ("1qb_half_ppr", "1qb_ppr", "sf_half_ppr")
+
+
+def test_active_environment_validation_blocks_less_than_minimum_viable_set() -> None:
+    with pytest.raises(ConfigError, match="Missing required markets"):
+        validate_canonical_environment_keys(("1qb_half_ppr", "1qb_ppr"))
 
 
 def test_1qb_ppr_selects_1qb_ppr() -> None:
@@ -46,6 +57,23 @@ def test_sf_half_ppr_selects_sf_half_ppr() -> None:
         }
     )
     assert canonical_environment_key_for_league(league) == "sf_half_ppr"
+
+
+def test_sf_ppr_falls_back_to_sf_half_ppr_when_sf_ppr_market_is_unavailable() -> None:
+    league = parse_league_settings(
+        {
+            "league_id": "1",
+            "name": "SF PPR",
+            "season": "2026",
+            "total_rosters": 12,
+            "scoring_settings": {"rec": 1.0, "pass_td": 4},
+            "roster_positions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "BN"],
+        }
+    )
+    assert canonical_environment_key_for_league(
+        league,
+        environment_keys=("1qb_half_ppr", "1qb_ppr", "sf_half_ppr"),
+    ) == "sf_half_ppr"
 
 
 def test_1qb_standard_selects_nearest_active_half_ppr_anchor() -> None:
@@ -93,6 +121,12 @@ def test_te_premium_does_not_change_base_reception_classification() -> None:
 def test_four_environments_generate_exactly_twelve_directed_tests() -> None:
     pairs = directed_transform_pairs()
     assert len(pairs) == 12
+    assert all(source != target for source, target in pairs)
+
+
+def test_three_environments_generate_exactly_six_directed_tests() -> None:
+    pairs = directed_transform_pairs(("1qb_half_ppr", "1qb_ppr", "sf_half_ppr"))
+    assert len(pairs) == 6
     assert all(source != target for source, target in pairs)
 
 

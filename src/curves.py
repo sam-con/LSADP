@@ -125,7 +125,15 @@ def _cross_validated_rmse(season_player_ppg: pd.DataFrame, position: str, model_
         if train.empty or test.empty:
             continue
         aggregated = aggregate_rank_curves(train)
-        fit = fit_curve_for_position(aggregated[aggregated["position"] == position], position, model_name=model_name, historical_window="cv")
+        try:
+            fit = fit_curve_for_position(
+                aggregated[aggregated["position"] == position],
+                position,
+                model_name=model_name,
+                historical_window="cv",
+            )
+        except CurveFitError:
+            continue
         predictions = np.array([fit.evaluate(rank) for rank in test["rank"].to_numpy(dtype=float)])
         errors.append(float(np.sqrt(np.mean(np.square(test["ppg"].to_numpy(dtype=float) - predictions)))))
     if not errors:
@@ -192,17 +200,20 @@ def select_curve_models(
 
         exp_fit = fit_curve_for_position(position_empirical, position=position, model_name="exp", historical_window=historical_window)
         exp_fit.cv_rmse = _cross_validated_rmse(season_player_ppg, position=position, model_name="exp")
-
-        floor_fit = fit_curve_for_position(position_empirical, position=position, model_name="exp_k", historical_window=historical_window)
-        floor_fit.cv_rmse = _cross_validated_rmse(season_player_ppg, position=position, model_name="exp_k")
-
-        fit_records.extend([asdict(exp_fit), asdict(floor_fit)])
+        fit_records.append(asdict(exp_fit))
 
         selected = exp_fit
-        if np.isfinite(exp_fit.cv_rmse) and np.isfinite(floor_fit.cv_rmse):
-            improvement = (exp_fit.cv_rmse - floor_fit.cv_rmse) / exp_fit.cv_rmse if exp_fit.cv_rmse else 0.0
-            if improvement >= minimum_relative_improvement:
-                selected = floor_fit
+        try:
+            floor_fit = fit_curve_for_position(position_empirical, position=position, model_name="exp_k", historical_window=historical_window)
+            floor_fit.cv_rmse = _cross_validated_rmse(season_player_ppg, position=position, model_name="exp_k")
+            fit_records.append(asdict(floor_fit))
+
+            if np.isfinite(exp_fit.cv_rmse) and np.isfinite(floor_fit.cv_rmse):
+                improvement = (exp_fit.cv_rmse - floor_fit.cv_rmse) / exp_fit.cv_rmse if exp_fit.cv_rmse else 0.0
+                if improvement >= minimum_relative_improvement:
+                    selected = floor_fit
+        except CurveFitError:
+            pass
         selected_records.append(asdict(selected))
 
     return pd.DataFrame(fit_records), pd.DataFrame(selected_records)

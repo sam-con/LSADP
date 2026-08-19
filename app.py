@@ -436,20 +436,27 @@ def render_public_page() -> None:
             "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
         }
     )
-    league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID")
+    analysis = st.session_state.get("public_analysis")
+    analyzed_league_id = st.session_state.get("public_analysis_league_id")
+    league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID", key="public_league_id")
     if st.button("Analyze League", type="primary", use_container_width=True):
         if not league_id.strip():
             st.warning("Enter a Sleeper league ID to analyze.")
-            return
-        with st.spinner("Selecting the closest canonical anchor, applying current league settings, and transforming ADP..."):
-            try:
-                analysis = cached_run_public_analysis(league_id.strip())
-            except LSADPError as exc:
-                st.error(str(exc))
-                return
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Unexpected failure while analyzing the league: {exc}")
-                return
+        else:
+            with st.spinner("Selecting the closest canonical anchor, applying current league settings, and transforming ADP..."):
+                try:
+                    analysis = cached_run_public_analysis(league_id.strip())
+                except LSADPError as exc:
+                    st.error(str(exc))
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Unexpected failure while analyzing the league: {exc}")
+                else:
+                    st.session_state["public_analysis"] = analysis
+                    st.session_state["public_analysis_league_id"] = league_id.strip()
+                    analyzed_league_id = league_id.strip()
+    if analysis is not None:
+        if analyzed_league_id:
+            st.caption(f"Showing loaded analysis for league `{analyzed_league_id}`.")
         render_public_results(analysis)
     else:
         st.info("Enter a Sleeper league ID and the app will anchor from the nearest saved BeatADP Sleeper canonical market automatically.")

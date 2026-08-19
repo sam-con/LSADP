@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from src.config import CANONICAL_ADP_PATHS, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES
 from src.models import ConfigError, LeagueSettings
@@ -11,26 +12,34 @@ from src.models import ConfigError, LeagueSettings
 def canonical_configuration(
     leagues: dict[str, str] | None = None,
     adp_paths: dict[str, Path] | None = None,
-) -> dict[str, dict[str, str]]:
+    adp_source: str | None = None,
+    adp_details: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Return the configured canonical environment metadata."""
 
     leagues = leagues or CANONICAL_LEAGUES
-    adp_paths = adp_paths or CANONICAL_ADP_PATHS
-    configuration: dict[str, dict[str, str]] = {}
+    configuration: dict[str, dict[str, Any]] = {}
     for environment_key in CANONICAL_ENVIRONMENTS:
         configuration[environment_key] = {
             "label": CANONICAL_LABELS[environment_key],
             "league_id": leagues.get(environment_key, ""),
-            "adp_path": str(adp_paths[environment_key]),
         }
+        if adp_paths is not None:
+            configuration[environment_key]["adp_path"] = str(adp_paths[environment_key])
+        if adp_source is not None:
+            configuration[environment_key]["adp_source"] = adp_source
+        if adp_details is not None and environment_key in adp_details:
+            configuration[environment_key]["adp_details"] = adp_details[environment_key]
     return configuration
 
 
-def validate_canonical_configuration(leagues: dict[str, str], adp_paths: dict[str, Path]) -> None:
+def validate_canonical_configuration(leagues: dict[str, str], adp_paths: dict[str, Path] | None = None) -> None:
     """Ensure all six canonical environments are configured explicitly."""
 
     missing_leagues = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if not leagues.get(environment_key)]
-    missing_paths = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in adp_paths]
+    missing_paths = []
+    if adp_paths is not None:
+        missing_paths = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in adp_paths]
     if missing_leagues or missing_paths:
         parts = []
         if missing_leagues:

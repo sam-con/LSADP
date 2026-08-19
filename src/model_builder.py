@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.adp import ADPDataProvider
+from src.adp import ADPDataProvider, FantasyCalcADPProvider, match_players_by_identity
 from src.analysis import default_modeling_config, load_league_environment
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.calibration import calibrate_market_values
@@ -22,7 +23,7 @@ from src.canonical import (
     directed_transform_pairs,
     validate_canonical_configuration,
 )
-from src.config import APP_VERSION, CANONICAL_ADP_PATHS, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES
+from src.config import APP_VERSION, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES
 from src.models import ConfigError, ModelingConfig
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
@@ -40,6 +41,118 @@ def validate_environment_identity(environment_key: str, league) -> None:
         )
 
 
+def canonical_team_counts(environment_bundle: dict[str, dict[str, Any]]) -> dict[str, int]:
+    """Return canonical team counts keyed by environment."""
+
+    return {
+        environment_key: int(environment_bundle[environment_key]["league"].total_rosters)
+        for environment_key in CANONICAL_ENVIRONMENTS
+    }
+
+
+def validate_canonical_team_counts(environment_bundle: dict[str, dict[str, Any]]) -> tuple[int, dict[str, int]]:
+    """Ensure the canonical environments share one calibration team count."""
+
+    counts = canonical_team_counts(environment_bundle)
+    unique_counts = sorted(set(counts.values()))
+    if len(unique_counts) != 1:
+        mismatch = ", ".join(f"{environment_key}={count}" for environment_key, count in counts.items())
+        raise ConfigError(
+            "Canonical Sleeper leagues do not share one team count, so FantasyCalc cannot be queried against a single "
+            f"canonical market size. Found: {mismatch}"
+        )
+    return unique_counts[0], counts
+
+
+def summarize_canonical_market_distinctness(source_adp_by_environment: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Measure whether the canonical ADP feeds are materially distinct."""
+
+    rows: list[dict[str, Any]] = []
+    for left_key, right_key in combinations(CANONICAL_ENVIRONMENTS, 2):
+        left = source_adp_by_environment[left_key][["player_id", "normalized_name", "position", "player_name", "adp"]].copy()
+        right = source_adp_by_environment[right_key][["player_id", "normalized_name", "position", "player_name", "adp"]].rename(
+            columns={"adp": "comparison_adp"}
+        )
+        merged = match_players_by_identity(left, right)
+        matched = merged[merged["comparison_adp"].notna()].copy()
+        if matched.empty:
+            rows.append(
+                {
+                    "left_environment": left_key,
+                    "right_environment": right_key,
+                    "matched_players": 0,
+                    "identical_share": 1.0,
+                    "mean_absolute_diff": 0.0,
+                    "max_absolute_diff": 0.0,
+                    "status": "No overlap",
+                }
+            )
+            continue
+        matched["absolute_diff"] = (matched["adp"] - matched["comparison_adp"]).abs()
+        identical_share = float((matched["absolute_diff"] < 1e-9).mean())
+        mean_absolute_diff = float(matched["absolute_diff"].mean())
+        rows.append(
+            {
+                "left_environment": left_key,
+                "right_environment": right_key,
+                "matched_players": int(len(matched)),
+                "identical_share": identical_share,
+                "mean_absolute_diff": mean_absolute_diff,
+                "max_absolute_diff": float(matched["absolute_diff"].max()),
+                "status": "Distinct" if identical_share < 0.95 and mean_absolute_diff > 0.05 else "Suspiciously similar",
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["status", "left_environment", "right_environment"]).reset_index(drop=True)
+
+
+def validate_canonical_market_distinctness(source_adp_by_environment: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Block calibration if FantasyCalc appears to be returning identical markets."""
+
+    diagnostics = summarize_canonical_market_distinctness(source_adp_by_environment)
+    suspicious = diagnostics[diagnostics["status"] == "Suspiciously similar"]
+    if not suspicious.empty:
+        offenders = ", ".join(
+            f"{row.left_environment} vs {row.right_environment}"
+            for row in suspicious.itertuples(index=False)
+        )
+        raise ConfigError(
+            "FantasyCalc returned canonical ADP markets that appear effectively identical. "
+            f"Check the provider/query parameters before calibrating: {offenders}"
+        )
+    return diagnostics
+
+
+def load_source_adp_by_environment(
+    environment_bundle: dict[str, dict[str, Any]],
+    *,
+    canonical_adp_paths: dict[str, Path] | None = None,
+    adp_provider: FantasyCalcADPProvider | None = None,
+    force_adp_refresh: bool = False,
+) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    """Load canonical ADP inputs either from CSV fixtures or live FantasyCalc."""
+
+    if canonical_adp_paths is not None:
+        frames: dict[str, pd.DataFrame] = {}
+        metadata: dict[str, dict[str, Any]] = {}
+        for environment_key in CANONICAL_ENVIRONMENTS:
+            frame, entry = ADPDataProvider(canonical_adp_paths[environment_key]).load_with_metadata()
+            frame["canonical_format"] = environment_key
+            frames[environment_key] = frame
+            metadata[environment_key] = entry
+        return frames, {
+            "source": "csv",
+            "status": "Healthy",
+            "last_refresh": None,
+            "canonical_team_count": sorted(set(canonical_team_counts(environment_bundle).values())),
+            "formats": metadata,
+        }
+
+    provider = adp_provider or FantasyCalcADPProvider()
+    _, counts = validate_canonical_team_counts(environment_bundle)
+    bundle = provider.load_canonical_markets(counts, force_refresh=force_adp_refresh)
+    return bundle["frames"], bundle
+
+
 def build_canonical_environment_bundle(
     client: SleeperClient,
     canonical_leagues: dict[str, str] | None = None,
@@ -49,7 +162,7 @@ def build_canonical_environment_bundle(
     """Build historical environments for all six canonical leagues."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
-    validate_canonical_configuration(canonical_leagues, CANONICAL_ADP_PATHS)
+    validate_canonical_configuration(canonical_leagues)
     modeling_config = modeling_config or default_modeling_config()
 
     bundle: dict[str, dict[str, Any]] = {}
@@ -324,13 +437,14 @@ def build_candidate_model(
     client: SleeperClient,
     canonical_leagues: dict[str, str] | None = None,
     canonical_adp_paths: dict[str, Path] | None = None,
+    adp_provider: FantasyCalcADPProvider | None = None,
     modeling_config: ModelingConfig | None = None,
     today: date | None = None,
+    force_adp_refresh: bool = False,
 ) -> dict[str, Any]:
     """Build, validate, and package a six-format candidate model."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
-    canonical_adp_paths = canonical_adp_paths or CANONICAL_ADP_PATHS
     validate_canonical_configuration(canonical_leagues, canonical_adp_paths)
     modeling_config = modeling_config or default_modeling_config()
 
@@ -340,10 +454,14 @@ def build_candidate_model(
         modeling_config=modeling_config,
         today=today,
     )
-    source_adp_by_environment = {
-        environment_key: ADPDataProvider(canonical_adp_paths[environment_key]).load()
-        for environment_key in CANONICAL_ENVIRONMENTS
-    }
+    canonical_team_count, canonical_team_counts_by_environment = validate_canonical_team_counts(environment_bundle)
+    source_adp_by_environment, adp_source_summary = load_source_adp_by_environment(
+        environment_bundle,
+        canonical_adp_paths=canonical_adp_paths,
+        adp_provider=adp_provider,
+        force_adp_refresh=force_adp_refresh,
+    )
+    market_distinctness = validate_canonical_market_distinctness(source_adp_by_environment)
 
     spec_rows: list[dict[str, Any]] = []
     validation_frames: list[pd.DataFrame] = []
@@ -420,7 +538,12 @@ def build_candidate_model(
         calibration["replacement_method"] = best_spec["replacement_method"]
         calibration_rows.append(calibration)
 
-    canonical_config_payload = canonical_configuration(canonical_leagues, canonical_adp_paths)
+    canonical_config_payload = canonical_configuration(
+        canonical_leagues,
+        adp_paths=canonical_adp_paths,
+        adp_source=str(adp_source_summary["source"]),
+        adp_details=adp_source_summary["formats"],
+    )
     for environment_key in CANONICAL_ENVIRONMENTS:
         canonical_config_payload[environment_key]["scoring_settings"] = environment_bundle[environment_key]["league"].scoring_settings
         canonical_config_payload[environment_key]["roster_positions"] = environment_bundle[environment_key]["league"].roster_positions
@@ -436,6 +559,15 @@ def build_candidate_model(
         "generated_timestamp": datetime.now(UTC).isoformat(),
         "model_version": APP_VERSION,
         "canonical_environments": canonical_config_payload,
+        "adp_snapshot": {
+            "source": adp_source_summary["source"],
+            "status": adp_source_summary["status"],
+            "last_refresh": adp_source_summary.get("last_refresh"),
+            "canonical_team_count": canonical_team_count,
+            "team_counts_by_environment": canonical_team_counts_by_environment,
+            "formats": adp_source_summary["formats"],
+            "market_distinctness": market_distinctness.to_dict(orient="records"),
+        },
         "historical_seasons": {
             environment_key: [league.season for league in environment_bundle[environment_key]["historical_leagues"]]
             for environment_key in CANONICAL_ENVIRONMENTS
@@ -457,6 +589,8 @@ def build_candidate_model(
         "selected_validation": best_validation,
         "validation_by_type": grouped_type,
         "leave_one_out": leave_one_out,
+        "adp_source_summary": adp_source_summary,
+        "market_distinctness": market_distinctness,
         "curves": pd.concat(curves_rows, ignore_index=True),
         "replacement": pd.concat(replacement_rows, ignore_index=True),
         "market_calibration": pd.concat(calibration_rows, ignore_index=True) if calibration_rows else pd.DataFrame(),
@@ -497,11 +631,21 @@ def build_public_anchor_projection(
     target_environment: dict[str, Any],
     artifacts,
     canonical_adp_paths: dict[str, Path] | None = None,
-) -> pd.DataFrame:
+    adp_provider: FantasyCalcADPProvider | None = None,
+    force_adp_refresh: bool = False,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Project a user league from the selected canonical production anchor."""
 
-    canonical_adp_paths = canonical_adp_paths or CANONICAL_ADP_PATHS
-    source_adp = ADPDataProvider(canonical_adp_paths[source_key]).load()
+    if canonical_adp_paths is not None:
+        source_adp, source_adp_metadata = ADPDataProvider(canonical_adp_paths[source_key]).load_with_metadata()
+    else:
+        provider = adp_provider or FantasyCalcADPProvider()
+        canonical_config = artifacts.metadata["canonical_environments"][source_key]
+        source_adp, source_adp_metadata = provider.load_environment(
+            source_key,
+            num_teams=int(canonical_config["team_count"]),
+            force_refresh=force_adp_refresh,
+        )
     spec = {
         "model_name": artifacts.metadata["selected_model_name"],
         "metric_mode": artifacts.metadata["selected_metric_mode"],
@@ -535,7 +679,7 @@ def build_public_anchor_projection(
     )
     target_prediction["selected_canonical_key"] = source_key
     target_prediction["selected_canonical_label"] = CANONICAL_LABELS[source_key]
-    return target_prediction
+    return target_prediction, source_adp_metadata
 
 
 def build_error_by_adp_bucket(predicted: pd.DataFrame, actual: pd.DataFrame) -> pd.DataFrame:
@@ -588,12 +732,13 @@ def run_public_canonical_analysis(
     production_manager: CanonicalArtifactManager,
     target_league_id: str,
     canonical_adp_paths: dict[str, Path] | None = None,
+    adp_provider: FantasyCalcADPProvider | None = None,
     modeling_config: ModelingConfig | None = None,
     today: date | None = None,
+    force_adp_refresh: bool = False,
 ) -> dict[str, Any]:
     """Run the public user flow using the selected production canonical model."""
 
-    canonical_adp_paths = canonical_adp_paths or CANONICAL_ADP_PATHS
     artifacts = production_manager.load()
     modeling_config = modeling_config or default_modeling_config()
     target_environment = load_league_environment(
@@ -604,16 +749,19 @@ def run_public_canonical_analysis(
         replacement_method="starter_demand",
     )
     anchor_key = canonical_environment_key_for_league(target_environment["league"])
-    results = build_public_anchor_projection(
+    results, source_adp_metadata = build_public_anchor_projection(
         source_key=anchor_key,
         target_environment=target_environment,
         artifacts=artifacts,
         canonical_adp_paths=canonical_adp_paths,
+        adp_provider=adp_provider,
+        force_adp_refresh=force_adp_refresh,
     )
     return {
         "artifacts": artifacts,
         "target_environment": target_environment,
         "results": results,
+        "adp_source_metadata": source_adp_metadata,
         "selected_canonical_key": anchor_key,
         "selected_canonical_label": CANONICAL_LABELS[anchor_key],
     }

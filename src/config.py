@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SHOW_DEVELOPMENT_PAGE = True
+SHOW_DEVELOPMENT_PAGE = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -12,6 +12,8 @@ BASELINE_DIR = DATA_DIR / "baseline"
 PRODUCTION_MODEL_DIR = BASELINE_DIR / "production"
 CANDIDATE_MODEL_DIR = BASELINE_DIR / "candidate"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "validation"
+ADP_CACHE_DIR = DATA_DIR / "adp_cache"
+ADP_CACHE_METADATA_FILE = ADP_CACHE_DIR / "metadata.json"
 
 ADP_1QB_PATH = DATA_DIR / "adp_1qb.csv"
 ADP_SUPERFLEX_PATH = DATA_DIR / "adp_superflex.csv"
@@ -37,6 +39,15 @@ CANONICAL_LABELS = {
     "sf_ppr": "Superflex PPR",
 }
 
+CANONICAL_ADP_CACHE_FILES = {
+    "1qb_standard": "1qb_standard.csv",
+    "1qb_half_ppr": "1qb_half_ppr.csv",
+    "1qb_ppr": "1qb_ppr.csv",
+    "sf_standard": "sf_standard.csv",
+    "sf_half_ppr": "sf_half_ppr.csv",
+    "sf_ppr": "sf_ppr.csv",
+}
+
 CANONICAL_LEAGUES = {
     "1qb_standard": "1395458028047720448",
     "1qb_half_ppr": "1395457853489176576",
@@ -57,6 +68,11 @@ CANONICAL_ADP_PATHS = {
 
 APP_VERSION = "0.1.0"
 REQUEST_TIMEOUT_SECONDS = 20
+ADP_CACHE_TTL_HOURS = 24
+FANTASYCALC_API_URL = "https://api.fantasycalc.com/values/current"
+FANTASYCALC_SOURCE_NAME = "FantasyCalc"
+FANTASYCALC_IS_DYNASTY = False
+FANTASYCALC_INCLUDE_ADP = True
 REGULAR_SEASON_WEEKS = tuple(range(1, 19))
 CORE_POSITIONS = ("QB", "RB", "WR", "TE")
 FLEX_POSITIONS = {"RB", "WR", "TE"}

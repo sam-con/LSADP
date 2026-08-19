@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,8 @@ from src.config import (
 )
 from src.models import ConfigError
 from src.utils import CORE_POSITIONS, ensure_columns, normalize_player_name, rank_players_within_position
+
+UTC = timezone.utc
 
 FANTASYCALC_ADP_UNAVAILABLE_MESSAGE = "FantasyCalc ADP is currently unavailable for this configuration."
 BEATADP_REQUIRED_SOURCE_PREFIX = "SLEEPER|"

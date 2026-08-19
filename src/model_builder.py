@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,8 @@ from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
 from src.vorp import build_vorp_table
 from src.utils import required_completed_seasons
+
+UTC = timezone.utc
 
 
 def validate_environment_identity(environment_key: str, league) -> None:

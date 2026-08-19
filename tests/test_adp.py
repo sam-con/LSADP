@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,8 @@ from src.adp import (
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.model_builder import build_candidate_model, run_public_canonical_analysis, save_candidate_model
 from src.models import ConfigError
+
+UTC = timezone.utc
 
 
 def donor_configuration_frame() -> pd.DataFrame:

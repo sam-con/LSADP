@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -38,6 +38,8 @@ from src.transform import apply_league_transformation
 from src.utils import adp_utility
 from src.validation import positional_error_breakdown, score_prediction
 from src.vorp import build_vorp_table, merge_metric_into_players
+
+UTC = timezone.utc
 
 
 def default_modeling_config() -> ModelingConfig:

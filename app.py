@@ -24,6 +24,7 @@ from src.charts import (
 )
 from src.config import APP_VERSION, CANONICAL_LEAGUES, HISTORICAL_DONOR_FILE, SHOW_DEVELOPMENT_PAGE
 from src.donors import donor_matrix_summary, validate_historical_donor_configuration
+from src.history_library import build_league_environment_from_library
 from src.model_builder import (
     build_aggregated_positional_errors,
     build_candidate_model,
@@ -269,6 +270,34 @@ def render_public_results(analysis: dict[str, Any]) -> None:
         format_timestamp(adp_source_metadata.get("retrieved_at") or adp_source_metadata.get("recorded_at")),
     )
 
+    match_summary = target_environment.get("position_match_summary", pd.DataFrame())
+    if not match_summary.empty:
+        st.subheader("Historical Scoring References")
+        summary_view = match_summary[["position", "match_quality", "status", "distance", "max_reliable_rank"]].rename(
+            columns={
+                "position": "Position",
+                "match_quality": "Quality",
+                "status": "Coverage",
+                "distance": "Distance",
+                "max_reliable_rank": "Reliable Rank",
+            }
+        )
+        st.dataframe(summary_view, use_container_width=True, hide_index=True)
+        with st.expander("Position Match Details"):
+            for row in match_summary.to_dict(orient="records"):
+                st.markdown(f"**{row['position']}**")
+                st.write(
+                    {
+                        "quality": row["match_quality"],
+                        "coverage": row["status"],
+                        "distance": row["distance"],
+                        "target_scoring": row["target_scoring"],
+                        "matched_scoring": row["matched_scoring"],
+                    }
+                )
+                if row.get("differing_fields"):
+                    st.dataframe(pd.DataFrame(row["differing_fields"]), use_container_width=True, hide_index=True)
+
     st.subheader("Adjusted Rankings")
     search = st.text_input(
         "Search players",
@@ -435,17 +464,7 @@ def render_public_results(analysis: dict[str, Any]) -> None:
             if fallback_reason:
                 st.caption(f"Fallback reason: {fallback_reason}")
         else:
-            coverage_rows = [
-                {
-                    "season": item.season,
-                    "weeks_loaded": item.weeks_loaded,
-                    "unique_player_weeks": item.unique_player_weeks,
-                    "unique_players": item.unique_players,
-                    "players_by_position": item.unique_players_by_position,
-                    "deepest_rank_by_position": item.deepest_rank_by_position,
-                }
-                for item in target_environment["coverage"]
-            ]
+            coverage_rows = target_environment.get("coverage_frame", pd.DataFrame())
             st.markdown("**Historical Sleeper Coverage**")
             st.dataframe(pd.DataFrame(coverage_rows), use_container_width=True, hide_index=True)
             st.markdown("**Target Curve Fits**")
@@ -693,9 +712,29 @@ def render_donor_validation_section(canonical_leagues_json: str) -> None:
 
 
 def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
+    history_environments = bundle.get("history_position_environments", pd.DataFrame())
+    history_seasons = bundle.get("history_environment_seasons", pd.DataFrame())
     selected_validation = bundle["selected_validation"].copy()
     selected_validation["source_label"] = selected_validation["source_environment"].map(CANONICAL_LABELS)
     selected_validation["target_label"] = selected_validation["target_environment"].map(CANONICAL_LABELS)
+
+    if not history_environments.empty:
+        st.markdown("## Position History Library")
+        st.write(bundle.get("history_library_metadata", {}))
+        counts = (
+            history_environments.groupby(["position", "status"], as_index=False)
+            .size()
+            .pivot(index="position", columns="status", values="size")
+            .fillna(0)
+            .reset_index()
+        )
+        st.dataframe(history_environments, use_container_width=True, hide_index=True)
+        if not counts.empty:
+            st.markdown("### Coverage Summary")
+            st.dataframe(counts, use_container_width=True, hide_index=True)
+        if not history_seasons.empty:
+            st.markdown("### Seasonal Coverage")
+            st.dataframe(history_seasons, use_container_width=True, hide_index=True)
 
     st.markdown("## ADP Inputs")
     st.write(bundle["adp_source_summary"])
@@ -815,6 +854,34 @@ def render_development_page() -> None:
 
     candidate_bundle = st.session_state.get("candidate_bundle")
     if candidate_bundle is not None:
+        st.markdown("## History Match Tester")
+        inspect_league_id = st.text_input("Inspect Sleeper league ID against the position history library", key="history_match_league_id")
+        if st.button("Inspect History Match", use_container_width=True):
+            if not inspect_league_id.strip():
+                st.warning("Enter a Sleeper league ID to inspect.")
+            else:
+                try:
+                    league = SleeperClient().get_league(inspect_league_id.strip())
+                    inspected = build_league_environment_from_library(
+                        league=league,
+                        library_bundle={
+                            "position_scoring_environments": candidate_bundle.get("history_position_environments", pd.DataFrame()),
+                            "environment_seasons": candidate_bundle.get("history_environment_seasons", pd.DataFrame()),
+                            "curve_models": candidate_bundle.get("history_curve_models", pd.DataFrame()),
+                            "fitted_curves": candidate_bundle.get("history_curves", pd.DataFrame()),
+                        },
+                        replacement_method="starter_demand",
+                    )
+                    st.dataframe(inspected["position_match_summary"], use_container_width=True, hide_index=True)
+                    if not inspected["position_match_summary"].empty:
+                        for row in inspected["position_match_summary"].to_dict(orient="records"):
+                            if row.get("differing_fields"):
+                                st.markdown(f"**{row['position']} scoring differences**")
+                                st.dataframe(pd.DataFrame(row["differing_fields"]), use_container_width=True, hide_index=True)
+                except LSADPError as exc:
+                    st.error(str(exc))
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Unexpected history-match inspection failure: {exc}")
         render_candidate_diagnostics(candidate_bundle)
 
 

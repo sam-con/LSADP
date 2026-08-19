@@ -486,6 +486,52 @@ def save_donor_configuration(
     metadata_path.write_text(json.dumps(metadata_payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def load_history_seed_leagues(
+    donor_path: Path = HISTORICAL_DONOR_FILE,
+    *,
+    today: date | None = None,
+    donor_configuration: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Load seed leagues for the position-history library without forcing format buckets."""
+
+    today = today or date.today()
+    if donor_configuration is not None:
+        raw = donor_configuration.copy()
+        source = "provided_dataframe"
+    else:
+        if not donor_path.exists():
+            raise ConfigError(f"Historical donor source is missing at {donor_path}.")
+        if donor_path.stat().st_size == 0:
+            raise ConfigError(f"Historical donor source `{donor_path}` is empty.")
+        raw = _read_donor_source_file(donor_path) if donor_path.suffix.lower() != ".json" else _read_year_keyed_donor_json(donor_path)
+        source = str(donor_path)
+
+    if raw.empty:
+        raise ConfigError("Historical donor source does not contain any seed-league rows.")
+    if "league_id" not in raw.columns or "season" not in raw.columns:
+        raise ConfigError("Historical donor source must contain `league_id` and `season` columns for seed loading.")
+
+    seeds = raw.copy()
+    seeds["league_id"] = seeds["league_id"].astype(str).str.strip()
+    seeds["season"] = pd.to_numeric(seeds["season"], errors="coerce")
+    seeds["selected"] = seeds["selected"].map(_coerce_selected) if "selected" in seeds.columns else True
+    seeds = seeds.dropna(subset=["season"])
+    seeds["season"] = seeds["season"].astype(int)
+    seeds = seeds[seeds["selected"]].copy()
+    max_completed_season = today.year - 1
+    seeds = seeds[seeds["season"].between(2000, max_completed_season)].copy()
+    seeds = seeds.drop_duplicates(subset=["league_id", "season"], keep="first").reset_index(drop=True)
+    if seeds.empty:
+        raise ConfigError("Historical donor source does not contain any selected completed seasons for seed loading.")
+    metadata = {
+        "source": source,
+        "selected_rows": int(len(seeds)),
+        "unique_leagues": int(seeds["league_id"].nunique()),
+        "season_range": [int(seeds["season"].min()), int(seeds["season"].max())],
+    }
+    return seeds, metadata
+
+
 def donor_matrix_summary(
     donors: pd.DataFrame,
     required_seasons: list[int],

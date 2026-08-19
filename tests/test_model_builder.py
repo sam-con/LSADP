@@ -296,9 +296,9 @@ def test_public_runtime_prefers_league_history_when_available(
         canonical_adp_paths=canonical_adp_paths,
     )
 
-    assert analysis["target_environment"]["public_runtime_mode"] == "historical"
-    assert analysis["target_environment"]["historical_source"] == "league_history"
-    assert analysis["target_environment"]["coverage"]
+    assert analysis["target_environment"]["public_runtime_mode"] == "position_history_library"
+    assert analysis["target_environment"]["historical_source"] == "position_history_library"
+    assert not analysis["target_environment"]["position_match_summary"].empty
     assert analysis["results"]["league_expected_ppg"].notna().any()
 
 
@@ -334,9 +334,9 @@ def test_public_runtime_analyzes_league_without_history(
     )
 
     assert analysis["selected_canonical_key"] == "1qb_ppr"
-    assert analysis["target_environment"]["historical_source"] == "canonical_anchor_fallback"
-    assert analysis["target_environment"]["public_runtime_mode"] in {"no_history", "no_history_scoring_interpolated"}
-    assert analysis["target_environment"]["coverage"] == []
+    assert analysis["target_environment"]["historical_source"] == "position_history_library"
+    assert analysis["target_environment"]["public_runtime_mode"] == "position_history_library"
+    assert not analysis["target_environment"]["position_match_summary"].empty
     assert not analysis["results"].empty
     assert analysis["results"]["league_adjusted_adp"].notna().all()
 

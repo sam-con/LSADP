@@ -154,6 +154,11 @@ class CanonicalArtifacts:
     validation: pd.DataFrame
     canonical_config: dict[str, Any]
     metadata: dict[str, Any]
+    history_position_environments: pd.DataFrame = field(default_factory=pd.DataFrame)
+    history_environment_seasons: pd.DataFrame = field(default_factory=pd.DataFrame)
+    history_curve_models: pd.DataFrame = field(default_factory=pd.DataFrame)
+    history_curves: pd.DataFrame = field(default_factory=pd.DataFrame)
+    history_library_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

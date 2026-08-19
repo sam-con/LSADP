@@ -15,6 +15,11 @@ from src.config import (
     BASELINE_MODEL_FILE,
     BASELINE_REPLACEMENT_FILE,
     CANDIDATE_CANONICAL_LEAGUES_FILE,
+    CANDIDATE_HISTORY_CURVE_MODELS_FILE,
+    CANDIDATE_HISTORY_CURVES_FILE,
+    CANDIDATE_HISTORY_ENVIRONMENTS_FILE,
+    CANDIDATE_HISTORY_ENVIRONMENT_SEASONS_FILE,
+    CANDIDATE_HISTORY_LIBRARY_METADATA_FILE,
     CANDIDATE_CURVES_FILE,
     CANDIDATE_MARKET_CALIBRATION_FILE,
     CANDIDATE_METADATA_FILE,
@@ -22,6 +27,11 @@ from src.config import (
     CANDIDATE_MODEL_VALIDATION_FILE,
     CANDIDATE_REPLACEMENT_FILE,
     PRODUCTION_CANONICAL_LEAGUES_FILE,
+    PRODUCTION_HISTORY_CURVE_MODELS_FILE,
+    PRODUCTION_HISTORY_CURVES_FILE,
+    PRODUCTION_HISTORY_ENVIRONMENTS_FILE,
+    PRODUCTION_HISTORY_ENVIRONMENT_SEASONS_FILE,
+    PRODUCTION_HISTORY_LIBRARY_METADATA_FILE,
     PRODUCTION_CURVES_FILE,
     PRODUCTION_MARKET_CALIBRATION_FILE,
     PRODUCTION_METADATA_FILE,
@@ -116,6 +126,11 @@ class CanonicalArtifactManager:
         validation_path: Path,
         canonical_config_path: Path,
         metadata_path: Path,
+        history_position_environments_path: Path | None = None,
+        history_environment_seasons_path: Path | None = None,
+        history_curve_models_path: Path | None = None,
+        history_curves_path: Path | None = None,
+        history_library_metadata_path: Path | None = None,
     ) -> None:
         self.curves_path = curves_path
         self.replacement_path = replacement_path
@@ -124,6 +139,12 @@ class CanonicalArtifactManager:
         self.validation_path = validation_path
         self.canonical_config_path = canonical_config_path
         self.metadata_path = metadata_path
+        base_dir = curves_path.parent
+        self.history_position_environments_path = history_position_environments_path or (base_dir / "position_scoring_environments.csv")
+        self.history_environment_seasons_path = history_environment_seasons_path or (base_dir / "position_environment_seasons.csv")
+        self.history_curve_models_path = history_curve_models_path or (base_dir / "position_curve_models.csv")
+        self.history_curves_path = history_curves_path or (base_dir / "fitted_position_curves.csv")
+        self.history_library_metadata_path = history_library_metadata_path or (base_dir / "history_library_metadata.json")
 
     @classmethod
     def production(cls) -> "CanonicalArtifactManager":
@@ -135,6 +156,11 @@ class CanonicalArtifactManager:
             validation_path=PRODUCTION_MODEL_VALIDATION_FILE,
             canonical_config_path=PRODUCTION_CANONICAL_LEAGUES_FILE,
             metadata_path=PRODUCTION_METADATA_FILE,
+            history_position_environments_path=PRODUCTION_HISTORY_ENVIRONMENTS_FILE,
+            history_environment_seasons_path=PRODUCTION_HISTORY_ENVIRONMENT_SEASONS_FILE,
+            history_curve_models_path=PRODUCTION_HISTORY_CURVE_MODELS_FILE,
+            history_curves_path=PRODUCTION_HISTORY_CURVES_FILE,
+            history_library_metadata_path=PRODUCTION_HISTORY_LIBRARY_METADATA_FILE,
         )
 
     @classmethod
@@ -147,6 +173,11 @@ class CanonicalArtifactManager:
             validation_path=CANDIDATE_MODEL_VALIDATION_FILE,
             canonical_config_path=CANDIDATE_CANONICAL_LEAGUES_FILE,
             metadata_path=CANDIDATE_METADATA_FILE,
+            history_position_environments_path=CANDIDATE_HISTORY_ENVIRONMENTS_FILE,
+            history_environment_seasons_path=CANDIDATE_HISTORY_ENVIRONMENT_SEASONS_FILE,
+            history_curve_models_path=CANDIDATE_HISTORY_CURVE_MODELS_FILE,
+            history_curves_path=CANDIDATE_HISTORY_CURVES_FILE,
+            history_library_metadata_path=CANDIDATE_HISTORY_LIBRARY_METADATA_FILE,
         )
 
     def validate(self) -> None:
@@ -192,6 +223,21 @@ class CanonicalArtifactManager:
             validation=pd.read_csv(self.validation_path),
             canonical_config=json.loads(self.canonical_config_path.read_text(encoding="utf-8")),
             metadata=json.loads(self.metadata_path.read_text(encoding="utf-8")),
+            history_position_environments=pd.read_csv(self.history_position_environments_path)
+            if self.history_position_environments_path.exists()
+            else pd.DataFrame(),
+            history_environment_seasons=pd.read_csv(self.history_environment_seasons_path)
+            if self.history_environment_seasons_path.exists()
+            else pd.DataFrame(),
+            history_curve_models=pd.read_csv(self.history_curve_models_path)
+            if self.history_curve_models_path.exists()
+            else pd.DataFrame(),
+            history_curves=pd.read_csv(self.history_curves_path)
+            if self.history_curves_path.exists()
+            else pd.DataFrame(),
+            history_library_metadata=json.loads(self.history_library_metadata_path.read_text(encoding="utf-8"))
+            if self.history_library_metadata_path.exists()
+            else {},
         )
 
     def save(
@@ -203,6 +249,11 @@ class CanonicalArtifactManager:
         validation: pd.DataFrame,
         canonical_config: dict[str, Any],
         metadata: dict[str, Any],
+        history_position_environments: pd.DataFrame | None = None,
+        history_environment_seasons: pd.DataFrame | None = None,
+        history_curve_models: pd.DataFrame | None = None,
+        history_curves: pd.DataFrame | None = None,
+        history_library_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.curves_path.parent.mkdir(parents=True, exist_ok=True)
         curves.to_csv(self.curves_path, index=False)
@@ -212,6 +263,19 @@ class CanonicalArtifactManager:
         validation.to_csv(self.validation_path, index=False)
         self.canonical_config_path.write_text(json.dumps(canonical_config, indent=2, sort_keys=True), encoding="utf-8")
         self.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+        if history_position_environments is not None:
+            history_position_environments.to_csv(self.history_position_environments_path, index=False)
+        if history_environment_seasons is not None:
+            history_environment_seasons.to_csv(self.history_environment_seasons_path, index=False)
+        if history_curve_models is not None:
+            history_curve_models.to_csv(self.history_curve_models_path, index=False)
+        if history_curves is not None:
+            history_curves.to_csv(self.history_curves_path, index=False)
+        if history_library_metadata is not None:
+            self.history_library_metadata_path.write_text(
+                json.dumps(history_library_metadata, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
 
     def describe(self) -> dict[str, Any]:
         artifacts = self.load()
@@ -221,6 +285,8 @@ class CanonicalArtifactManager:
             "market_calibration_rows": len(artifacts.market_calibration),
             "model_parameter_rows": len(artifacts.model_parameters),
             "validation_rows": len(artifacts.validation),
+            "history_position_environment_rows": len(artifacts.history_position_environments),
+            "history_curve_rows": len(artifacts.history_curves),
             "metadata": artifacts.metadata,
         }
 
@@ -240,3 +306,12 @@ class CanonicalArtifactManager:
             (candidate_manager.metadata_path, self.metadata_path),
         ]:
             shutil.copy2(source, target)
+        for source, target in [
+            (candidate_manager.history_position_environments_path, self.history_position_environments_path),
+            (candidate_manager.history_environment_seasons_path, self.history_environment_seasons_path),
+            (candidate_manager.history_curve_models_path, self.history_curve_models_path),
+            (candidate_manager.history_curves_path, self.history_curves_path),
+            (candidate_manager.history_library_metadata_path, self.history_library_metadata_path),
+        ]:
+            if source.exists():
+                shutil.copy2(source, target)

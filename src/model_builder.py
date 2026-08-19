@@ -28,9 +28,9 @@ from src.canonical import (
 )
 from src.config import APP_VERSION, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES, HISTORICAL_DONOR_FILE
 from src.donors import (
-    build_historical_player_weeks_from_donor_validation,
-    validate_historical_donor_configuration,
+    load_history_seed_leagues,
 )
+from src.history_library import build_league_environment_from_library, build_position_history_library
 from src.models import ConfigError, HistoricalDataError, HistoricalLeagueSummary, LeagueSettings, ModelingConfig
 from src.replacement import calculate_starter_demand_replacement
 from src.sleeper import SleeperClient
@@ -396,57 +396,37 @@ def build_canonical_environment_bundle_from_donors(
     modeling_config: ModelingConfig | None = None,
     today: date | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    """Build canonical environments using donor scoring history plus canonical roster settings."""
+    """Build canonical environments using the position-specific history library."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
     environment_keys = ordered_canonical_environment_keys(environment_keys or CANONICAL_ENVIRONMENTS)
     modeling_config = modeling_config or default_modeling_config()
     today = today or date.today()
     canonical_settings = load_canonical_league_settings_bundle(client, canonical_leagues, environment_keys=environment_keys)
-    donor_validation = validate_historical_donor_configuration(
-        client,
-        canonical_leagues,
-        donor_configuration=donor_configuration,
-        modeling_config=modeling_config,
+    seed_leagues, seed_metadata = load_history_seed_leagues(
         today=today,
+        donor_configuration=donor_configuration,
     )
-    donor_history = build_historical_player_weeks_from_donor_validation(donor_validation)
-    required_seasons = required_completed_seasons(today=today, window=4)
-
-    historical_stub_by_format = {
-        scoring_format: [
-            HistoricalLeagueSummary(
-                league_id=f"donor_{scoring_format}",
-                season=season,
-                scoring_settings={},
-                roster_positions=[],
-                total_rosters=0,
-            )
-            for season in required_seasons
-        ]
-        for scoring_format in donor_history["player_weeks_by_format"]
-    }
+    history_library = build_position_history_library(
+        client=client,
+        seed_leagues=seed_leagues,
+        today=today,
+        modeling_config=modeling_config,
+    )
 
     bundle: dict[str, dict[str, Any]] = {}
     for environment_key in environment_keys:
         league = canonical_settings[environment_key]["league"]
-        scoring_format = detect_reception_format(league)
-        player_weeks = donor_history["player_weeks_by_format"][scoring_format]
-        coverage = donor_history["coverage_by_format"][scoring_format]
-        environment = build_environment_from_player_weeks(
+        environment = build_league_environment_from_library(
             league=league,
-            player_weeks=player_weeks,
-            coverage=coverage,
-            historical_leagues=historical_stub_by_format[scoring_format],
-            modeling_config=modeling_config,
             replacement_method="starter_demand",
+            library_bundle=history_library,
         )
         validate_environment_identity(environment_key, environment["league"])
-        environment["historical_source"] = "donor_leagues"
-        environment["historical_scoring_format"] = scoring_format
+        environment["historical_source"] = "position_history_library"
         bundle[environment_key] = environment
-    donor_history["validation"] = donor_validation
-    return bundle, donor_history
+    history_library["seed_metadata"] = seed_metadata
+    return bundle, history_library
 
 
 def candidate_model_specs() -> list[dict[str, Any]]:
@@ -766,8 +746,10 @@ def build_candidate_model(
     )
     donor_metadata = {
         "source": str(HISTORICAL_DONOR_FILE) if donor_configuration is None else "provided_dataframe",
-        "league_records": donor_history_bundle["league_records"].to_dict(orient="records"),
-        "validation": donor_history_bundle["validation"]["accepted"].to_dict(orient="records"),
+        "seed_metadata": donor_history_bundle.get("seed_metadata", {}),
+        "seed_leagues": donor_history_bundle["seed_leagues"].to_dict(orient="records"),
+        "library_metadata": donor_history_bundle["library_metadata"],
+        "position_environment_count": int(len(donor_history_bundle["position_scoring_environments"])),
     }
     canonical_team_count, canonical_team_counts_by_environment = validate_canonical_team_counts(
         environment_bundle,
@@ -917,6 +899,11 @@ def build_candidate_model(
         "canonical_config": canonical_config_payload,
         "metadata": metadata,
         "predictions": selected_predictions,
+        "history_position_environments": donor_history_bundle["position_scoring_environments"],
+        "history_environment_seasons": donor_history_bundle["environment_seasons"],
+        "history_curve_models": donor_history_bundle["curve_models"],
+        "history_curves": donor_history_bundle["fitted_curves"],
+        "history_library_metadata": donor_history_bundle["library_metadata"],
     }
 
 
@@ -931,6 +918,11 @@ def save_candidate_model(candidate_manager: CanonicalArtifactManager, candidate_
         validation=candidate_bundle["validation"],
         canonical_config=candidate_bundle["canonical_config"],
         metadata=candidate_bundle["metadata"],
+        history_position_environments=candidate_bundle.get("history_position_environments"),
+        history_environment_seasons=candidate_bundle.get("history_environment_seasons"),
+        history_curve_models=candidate_bundle.get("history_curve_models"),
+        history_curves=candidate_bundle.get("history_curves"),
+        history_library_metadata=candidate_bundle.get("history_library_metadata"),
     )
 
 
@@ -1002,6 +994,9 @@ def build_public_target_environment_from_anchor(
         "vorp_table": vorp_table,
         "historical_source": "canonical_anchor_fallback",
         "public_runtime_mode": runtime_mode,
+        "position_match_summary": pd.DataFrame(),
+        "matched_position_environments": pd.DataFrame(),
+        "coverage_frame": pd.DataFrame(),
     }
 
 
@@ -1235,17 +1230,19 @@ def run_public_canonical_analysis(
         target_league,
         environment_keys=available_environment_keys,
     )
+    history_library_bundle = {
+        "position_scoring_environments": artifacts.history_position_environments,
+        "environment_seasons": artifacts.history_environment_seasons,
+        "curve_models": artifacts.history_curve_models,
+        "fitted_curves": artifacts.history_curves,
+    }
     try:
-        target_environment = load_league_environment(
-            client=client,
-            league_id=target_league_id,
-            modeling_config=modeling_config,
-            today=today,
+        target_environment = build_league_environment_from_library(
+            league=target_league,
+            library_bundle=history_library_bundle,
             replacement_method=selected_replacement_method,
         )
-        target_environment["public_runtime_mode"] = "historical"
-        target_environment.setdefault("historical_source", "league_history")
-    except HistoricalDataError as exc:
+    except ConfigError as exc:
         target_environment = build_public_target_environment_from_anchor(
             artifacts=artifacts,
             source_key=anchor_key,

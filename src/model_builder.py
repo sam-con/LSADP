@@ -36,7 +36,7 @@ from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
 from src.vorp import build_vorp_table
-from src.utils import required_completed_seasons
+from src.utils import adp_utility, inverse_adp_utility, rank_players_within_position, required_completed_seasons
 
 UTC = timezone.utc
 
@@ -157,12 +157,15 @@ def load_source_adp_by_environment(
             frame["canonical_format"] = environment_key
             frames[environment_key] = frame
             metadata[environment_key] = entry
+        frames, metadata = synthesize_sf_ppr_from_square(frames, metadata)
         return frames, {
             "source": "csv",
             "status": "Saved",
             "last_refresh": None,
-            "available_environments": list(environment_keys),
-            "missing_environments": [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in environment_keys],
+            "available_environments": list(ordered_canonical_environment_keys(frames)),
+            "missing_environments": [
+                environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in frames
+            ],
             "formats": metadata,
         }
 
@@ -173,7 +176,169 @@ def load_source_adp_by_environment(
         raise ConfigError(
             "An ADP provider without CSV paths must implement load_canonical_markets(force_refresh=...)."
         ) from None
+    frames, metadata = synthesize_sf_ppr_from_square(bundle["frames"], bundle.get("formats", {}))
+    bundle["frames"] = frames
+    bundle["formats"] = metadata
+    bundle["available_environments"] = list(ordered_canonical_environment_keys(frames))
+    bundle["missing_environments"] = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in frames]
     return bundle["frames"], bundle
+
+
+def _frame_with_identity_key(frame: pd.DataFrame) -> pd.DataFrame:
+    working = frame.copy()
+    working["player_id"] = working["player_id"].astype("string")
+    working["normalized_name"] = working["normalized_name"].astype("string")
+    working["identity_key"] = working["player_id"].where(
+        working["player_id"].notna(),
+        working["normalized_name"] + "|" + working["position"].astype(str),
+    )
+    return working.drop_duplicates("identity_key", keep="first").reset_index(drop=True)
+
+
+def _estimate_market_via_square_path(
+    *,
+    base_frame: pd.DataFrame,
+    delta_from_frame: pd.DataFrame,
+    delta_to_frame: pd.DataFrame,
+    path_name: str,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    base = _frame_with_identity_key(base_frame)
+    delta_from = _frame_with_identity_key(delta_from_frame)[["identity_key", "position", "adp"]].rename(
+        columns={"adp": "adp_delta_from"}
+    )
+    delta_to = _frame_with_identity_key(delta_to_frame)[["identity_key", "adp"]].rename(columns={"adp": "adp_delta_to"})
+
+    delta = delta_from.merge(delta_to, on="identity_key", how="inner")
+    delta["delta_utility"] = adp_utility(delta["adp_delta_to"]) - adp_utility(delta["adp_delta_from"])
+
+    position_delta = delta.groupby("position")["delta_utility"].median().to_dict()
+    overall_delta = float(delta["delta_utility"].median()) if not delta.empty else 0.0
+
+    estimated = base.merge(delta[["identity_key", "delta_utility"]], on="identity_key", how="left")
+    estimated["delta_fill_kind"] = "direct"
+    estimated["delta_utility"] = estimated["delta_utility"].fillna(
+        estimated["position"].map(position_delta)
+    )
+    estimated.loc[estimated["delta_utility"].isna(), "delta_fill_kind"] = "overall_position_fallback"
+    estimated["delta_utility"] = estimated["delta_utility"].fillna(overall_delta)
+    estimated["estimated_utility"] = adp_utility(estimated["adp"]) + estimated["delta_utility"]
+    estimated["estimated_adp"] = inverse_adp_utility(estimated["estimated_utility"]).astype(float)
+    estimated["square_path"] = path_name
+    diagnostics = {
+        "path_name": path_name,
+        "base_rows": int(len(base)),
+        "direct_delta_rows": int((estimated["delta_fill_kind"] == "direct").sum()),
+        "fallback_delta_rows": int((estimated["delta_fill_kind"] != "direct").sum()),
+        "overall_delta_utility": overall_delta,
+        "position_delta_utility": {key: float(value) for key, value in position_delta.items()},
+    }
+    return estimated, diagnostics
+
+
+def synthesize_sf_ppr_from_square(
+    frames: dict[str, pd.DataFrame],
+    metadata: dict[str, dict[str, Any]],
+) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, Any]]]:
+    """Estimate the missing SF PPR market from the other three canonical corners."""
+
+    required = ("1qb_half_ppr", "1qb_ppr", "sf_half_ppr")
+    if "sf_ppr" in frames or any(environment_key not in frames for environment_key in required):
+        return frames, metadata
+
+    scoring_path, scoring_diagnostics = _estimate_market_via_square_path(
+        base_frame=frames["sf_half_ppr"],
+        delta_from_frame=frames["1qb_half_ppr"],
+        delta_to_frame=frames["1qb_ppr"],
+        path_name="sf_half_ppr_plus_scoring_delta",
+    )
+    scarcity_path, scarcity_diagnostics = _estimate_market_via_square_path(
+        base_frame=frames["1qb_ppr"],
+        delta_from_frame=frames["1qb_half_ppr"],
+        delta_to_frame=frames["sf_half_ppr"],
+        path_name="1qb_ppr_plus_superflex_delta",
+    )
+
+    left = scoring_path.rename(
+        columns={
+            "player_id": "player_id_left",
+            "sleeper_id": "sleeper_id_left",
+            "player_name": "player_name_left",
+            "position": "position_left",
+            "team": "team_left",
+            "normalized_name": "normalized_name_left",
+            "estimated_utility": "estimated_utility_left",
+            "estimated_adp": "estimated_adp_left",
+        }
+    )
+    right = scarcity_path.rename(
+        columns={
+            "player_id": "player_id_right",
+            "sleeper_id": "sleeper_id_right",
+            "player_name": "player_name_right",
+            "position": "position_right",
+            "team": "team_right",
+            "normalized_name": "normalized_name_right",
+            "estimated_utility": "estimated_utility_right",
+            "estimated_adp": "estimated_adp_right",
+        }
+    )
+    merged = left.merge(
+        right[
+            [
+                "identity_key",
+                "player_id_right",
+                "sleeper_id_right",
+                "player_name_right",
+                "position_right",
+                "team_right",
+                "normalized_name_right",
+                "estimated_utility_right",
+                "estimated_adp_right",
+            ]
+        ],
+        on="identity_key",
+        how="outer",
+    )
+
+    final = pd.DataFrame(
+        {
+            "player_id": merged["player_id_left"].fillna(merged["player_id_right"]).astype("string"),
+            "sleeper_id": merged["sleeper_id_left"].fillna(merged["sleeper_id_right"]).astype("string"),
+            "player_name": merged["player_name_left"].fillna(merged["player_name_right"]),
+            "position": merged["position_left"].fillna(merged["position_right"]),
+            "team": merged["team_left"].fillna(merged["team_right"]).fillna(""),
+            "normalized_name": merged["normalized_name_left"].fillna(merged["normalized_name_right"]),
+        }
+    )
+    utility_columns = merged[["estimated_utility_left", "estimated_utility_right"]]
+    final["synthetic_path_count"] = utility_columns.notna().sum(axis=1)
+    final["synthetic_utility"] = utility_columns.mean(axis=1, skipna=True)
+    final["adp"] = inverse_adp_utility(final["synthetic_utility"]).astype(float)
+    final["canonical_format"] = "sf_ppr"
+    final["source"] = "Synthetic Canonical SF PPR"
+    final["adp_source_field"] = "synthetic_complete_square"
+    final["retrieved_at"] = datetime.now(UTC).isoformat()
+    final["synthetic_method"] = "complete_square"
+    final["synthetic_source_environments"] = "1qb_half_ppr,1qb_ppr,sf_half_ppr"
+    final = final.dropna(subset=["player_name", "position", "adp"]).reset_index(drop=True)
+    final = rank_players_within_position(final)
+    frames = frames.copy()
+    metadata = metadata.copy()
+    frames["sf_ppr"] = final
+    metadata["sf_ppr"] = {
+        "source": "synthetic_complete_square",
+        "status": "Estimated",
+        "synthetic": True,
+        "player_count": int(len(final)),
+        "path": "synthetic://sf_ppr_complete_square",
+        "source_environments": list(required),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "blended_rows": int((final["synthetic_path_count"] == 2).sum()),
+        "single_path_rows": int((final["synthetic_path_count"] == 1).sum()),
+        "scoring_path": scoring_diagnostics,
+        "scarcity_path": scarcity_diagnostics,
+    }
+    return frames, metadata
 
 
 def build_canonical_environment_bundle(
@@ -566,25 +731,29 @@ def build_candidate_model(
         force_adp_refresh=force_adp_refresh,
     )
     active_environment_keys = validate_canonical_environment_keys(source_adp_by_environment)
+    synthetic_environment_keys = [
+        environment_key
+        for environment_key, entry in adp_source_summary.get("formats", {}).items()
+        if bool(entry.get("synthetic"))
+    ]
     validate_canonical_configuration(
         canonical_leagues,
         canonical_adp_paths,
         required_environment_keys=active_environment_keys,
+        allow_missing_adp_paths=synthetic_environment_keys,
     )
     if saved_adp_metadata is not None:
         adp_source_summary["last_refresh"] = saved_adp_metadata.get("fetched_at")
         adp_source_summary["source"] = saved_adp_metadata.get("source", adp_source_summary["source"])
         adp_source_summary["status"] = saved_adp_metadata.get("status", adp_source_summary["status"])
-        adp_source_summary["available_environments"] = saved_adp_metadata.get(
-            "available_environments",
-            list(active_environment_keys),
-        )
-        adp_source_summary["missing_environments"] = saved_adp_metadata.get(
-            "missing_environments",
-            [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in active_environment_keys],
-        )
         if "formats" in saved_adp_metadata:
-            adp_source_summary["formats"] = saved_adp_metadata["formats"]
+            merged_formats = dict(saved_adp_metadata["formats"])
+            merged_formats.update(adp_source_summary["formats"])
+            adp_source_summary["formats"] = merged_formats
+        adp_source_summary["available_environments"] = list(ordered_canonical_environment_keys(active_environment_keys))
+        adp_source_summary["missing_environments"] = [
+            environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key not in active_environment_keys
+        ]
 
     environment_bundle, donor_history_bundle = build_canonical_environment_bundle_from_donors(
         client=client,
@@ -852,9 +1021,17 @@ def build_public_anchor_projection(
         saved_adp_metadata = None
 
     if canonical_adp_paths is not None:
-        source_adp, source_adp_metadata = ADPDataProvider(canonical_adp_paths[source_key]).load_with_metadata()
+        source_adp_by_environment, adp_source_summary = load_source_adp_by_environment(
+            canonical_adp_paths=canonical_adp_paths,
+        )
+        if source_key not in source_adp_by_environment:
+            raise ConfigError(f"Canonical ADP is unavailable for {source_key}.")
+        source_adp = source_adp_by_environment[source_key]
+        source_adp_metadata = adp_source_summary.get("formats", {}).get(source_key, {})
         if saved_adp_metadata is not None:
-            source_adp_metadata = saved_adp_metadata.get("formats", {}).get(source_key, source_adp_metadata)
+            merged_metadata = dict(saved_adp_metadata.get("formats", {}).get(source_key, {}))
+            merged_metadata.update(source_adp_metadata)
+            source_adp_metadata = merged_metadata or source_adp_metadata
     else:
         provider = adp_provider or BeatADPProvider()
         canonical_config = artifacts.metadata["canonical_environments"][source_key]

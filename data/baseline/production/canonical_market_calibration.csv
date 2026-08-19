@@ -11,3 +11,7 @@ QB,-4.9658247755056415,0.2078021645505143,vorp,neg_log,1.0,sf_half_ppr,Curve + S
 RB,-4.871578439646963,0.3514826164779294,vorp,neg_log,1.0,sf_half_ppr,Curve + Starter VORP,starter_demand
 TE,-4.549955272623421,0.292965037638755,vorp,neg_log,1.0,sf_half_ppr,Curve + Starter VORP,starter_demand
 WR,-4.736517533106153,0.3493317471011426,vorp,neg_log,1.0,sf_half_ppr,Curve + Starter VORP,starter_demand
+QB,-4.870699134569357,0.19631375994456887,vorp,neg_log,1.0,sf_ppr,Curve + Starter VORP,starter_demand
+RB,-4.829376630172236,0.32438910462787546,vorp,neg_log,1.0,sf_ppr,Curve + Starter VORP,starter_demand
+TE,-4.460511511564872,0.23853746099620543,vorp,neg_log,1.0,sf_ppr,Curve + Starter VORP,starter_demand
+WR,-4.743279497672639,0.2926967950776971,vorp,neg_log,1.0,sf_ppr,Curve + Starter VORP,starter_demand

@@ -39,7 +39,7 @@ def canonical_configuration(
             "label": CANONICAL_LABELS[environment_key],
             "league_id": leagues.get(environment_key, ""),
         }
-        if adp_paths is not None:
+        if adp_paths is not None and environment_key in adp_paths:
             configuration[environment_key]["adp_path"] = str(adp_paths[environment_key])
         if adp_source is not None:
             configuration[environment_key]["adp_source"] = adp_source
@@ -73,14 +73,20 @@ def validate_canonical_configuration(
     leagues: dict[str, str],
     adp_paths: dict[str, Path] | None = None,
     required_environment_keys: list[str] | tuple[str, ...] | None = None,
+    allow_missing_adp_paths: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> None:
     """Ensure all canonical environments are configured explicitly."""
 
     required_environment_keys = ordered_canonical_environment_keys(required_environment_keys or CANONICAL_ENVIRONMENTS)
+    allow_missing_adp_paths = set(allow_missing_adp_paths or ())
     missing_leagues = [environment_key for environment_key in required_environment_keys if not leagues.get(environment_key)]
     missing_paths = []
     if adp_paths is not None:
-        missing_paths = [environment_key for environment_key in required_environment_keys if environment_key not in adp_paths]
+        missing_paths = [
+            environment_key
+            for environment_key in required_environment_keys
+            if environment_key not in adp_paths and environment_key not in allow_missing_adp_paths
+        ]
     if missing_leagues or missing_paths:
         parts = []
         if missing_leagues:

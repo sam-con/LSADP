@@ -4,11 +4,11 @@
     "1qb_ppr",
     "sf_half_ppr"
   ],
-  "fetched_at": "2026-08-19T04:34:26.895750+00:00",
+  "fetched_at": "2026-08-19T05:18:32.889143+00:00",
   "formats": {
     "1qb_half_ppr": {
       "ambiguous_rows": 0,
-      "checksum": "a99717ff2fd0dac7dc314982227697b62ab8fe703ccdef7c3ccce1b1cbe5d8db",
+      "checksum": "6896957bcfd7f6dbafc7f59f9dd5d93848e4efc1e8377f44ab7650d9989e62a9",
       "duplicate_player_ids": [],
       "duplicate_rows": 0,
       "label": "1qb_half_ppr",
@@ -16,7 +16,7 @@
       "max_adp": 457.0,
       "min_adp": 1.3,
       "missing_sleeper_adp_rows": 171,
-      "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_half_ppr.csv",
+      "path": "adp_1qb_half_ppr.csv",
       "player_count": 281,
       "raw_player_rows": 309,
       "recorded_at": "2026-08-15",
@@ -186,7 +186,7 @@
     },
     "1qb_ppr": {
       "ambiguous_rows": 0,
-      "checksum": "3492d8be7afcb6f9b86f7e85dbf6af279cf8638e0c0050507117800d3dd1f2cb",
+      "checksum": "ec33bcd7273685dfc181e9c894a7fa2504943b0d20411d54150d46d335ee1c4d",
       "duplicate_player_ids": [],
       "duplicate_rows": 0,
       "label": "1qb_ppr",
@@ -194,7 +194,7 @@
       "max_adp": 396.0,
       "min_adp": 1.4,
       "missing_sleeper_adp_rows": 206,
-      "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_1qb_ppr.csv",
+      "path": "adp_1qb_ppr.csv",
       "player_count": 251,
       "raw_player_rows": 274,
       "recorded_at": "2026-08-15",
@@ -364,7 +364,7 @@
     },
     "sf_half_ppr": {
       "ambiguous_rows": 0,
-      "checksum": "a0f984165621e6e2bd3c75ac3560db71daf65fccd4b88e566e92c543a5a46aa5",
+      "checksum": "4c3555b8ac5f04423fb7ae6957264b21fa26d8c55cbcaba8572237f8030f9a21",
       "duplicate_player_ids": [],
       "duplicate_rows": 0,
       "label": "sf_half_ppr",
@@ -372,7 +372,7 @@
       "max_adp": 440.5,
       "min_adp": 1.9,
       "missing_sleeper_adp_rows": 153,
-      "path": "C:\\Users\\conle_tqane1n\\Git\\LSADP\\data\\baseline\\adp_sf_half_ppr.csv",
+      "path": "adp_sf_half_ppr.csv",
       "player_count": 299,
       "raw_player_rows": 327,
       "recorded_at": "2026-08-15",

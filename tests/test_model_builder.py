@@ -10,6 +10,7 @@ from src.replacement import calculate_starter_demand_replacement
 from src.model_builder import (
     build_error_by_adp_bucket,
     build_candidate_model,
+    load_source_adp_by_environment,
     predict_between_canonical_environments,
     promote_candidate_model,
     run_public_canonical_analysis,
@@ -83,8 +84,14 @@ def test_candidate_build_accepts_three_market_beatadp_snapshot(
         donor_configuration=donor_configuration_frame(),
     )
     selected = bundle["selected_validation"]
-    assert len(selected) == 6
-    assert bundle["metadata"]["available_canonical_environments"] == ["1qb_half_ppr", "1qb_ppr", "sf_half_ppr"]
+    assert len(selected) == 12
+    assert bundle["metadata"]["available_canonical_environments"] == [
+        "1qb_half_ppr",
+        "1qb_ppr",
+        "sf_half_ppr",
+        "sf_ppr",
+    ]
+    assert bundle["adp_source_summary"]["formats"]["sf_ppr"]["synthetic"] is True
 
 
 def test_candidate_build_blocks_when_minimum_three_market_set_is_missing(
@@ -167,6 +174,53 @@ def test_successful_promotion_writes_expected_artifacts(
     assert not production.validation.empty
 
 
+def test_promotion_allows_validated_candidate_even_if_score_is_worse(tmp_path) -> None:
+    candidate_manager = _manager(tmp_path, "candidate")
+    production_manager = _manager(tmp_path, "production")
+    production_manager.save(
+        curves=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "rank": 1, "expected_ppg": 22.0, "dataset": "fitted"}]),
+        replacement=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "replacement_method": "starter_demand", "replacement_rank": 13, "replacement_ppg": 11.0, "method": "Starter Demand Replacement"}]),
+        market_calibration=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "model_name": "Prod", "metric_name": "vorp", "intercept": 0.0, "coefficient": 1.0, "utility_transform": "neg_log", "weight_power": 1.0, "replacement_method": "starter_demand"}]),
+        model_parameters=pd.DataFrame([{"spec_id": "prod_01", "model_name": "Prod", "composite_score": 10.0}]),
+        validation=pd.DataFrame([{"spec_id": "prod_01", "source_environment": "1qb_ppr", "target_environment": "sf_ppr", "weighted_mae": 1.0}]),
+        canonical_config={"1qb_ppr": {"label": "1QB PPR"}},
+        metadata={
+            "selected_model_name": "Prod",
+            "selected_utility_transform": "neg_log",
+            "selected_weight_power": 1.0,
+            "generated_timestamp": "2026-08-19T00:00:00+00:00",
+            "model_version": "0.1.0",
+            "canonical_environments": {"1qb_ppr": {"label": "1QB PPR"}},
+            "validation_complete": True,
+            "selected_model_score": 10.0,
+        },
+    )
+    candidate_manager.save(
+        curves=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "rank": 1, "expected_ppg": 20.0, "dataset": "fitted"}]),
+        replacement=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "replacement_method": "starter_demand", "replacement_rank": 13, "replacement_ppg": 10.0, "method": "Starter Demand Replacement"}]),
+        market_calibration=pd.DataFrame([{"environment_key": "1qb_ppr", "position": "QB", "model_name": "Cand", "metric_name": "vorp", "intercept": 0.0, "coefficient": 1.0, "utility_transform": "neg_log", "weight_power": 1.0, "replacement_method": "starter_demand"}]),
+        model_parameters=pd.DataFrame([{"spec_id": "cand_01", "model_name": "Cand", "composite_score": 20.0}]),
+        validation=pd.DataFrame([{"spec_id": "cand_01", "source_environment": "1qb_ppr", "target_environment": "sf_ppr", "weighted_mae": 2.0}]),
+        canonical_config={"1qb_ppr": {"label": "1QB PPR"}},
+        metadata={
+            "selected_model_name": "Cand",
+            "selected_utility_transform": "neg_log",
+            "selected_weight_power": 1.0,
+            "generated_timestamp": "2026-08-19T00:00:00+00:00",
+            "model_version": "0.1.0",
+            "canonical_environments": {"1qb_ppr": {"label": "1QB PPR"}},
+            "validation_complete": True,
+            "selected_model_score": 20.0,
+        },
+    )
+
+    promote_candidate_model(candidate_manager, production_manager)
+
+    production = production_manager.load()
+    assert production.metadata["selected_model_name"] == "Cand"
+    assert production.metadata["selected_model_score"] == 20.0
+
+
 def test_saved_model_reloads_deterministically(
     tmp_path,
     mock_client,
@@ -187,7 +241,7 @@ def test_saved_model_reloads_deterministically(
     assert first.model_parameters.equals(second.model_parameters)
 
 
-def test_public_runtime_falls_back_from_sf_ppr_to_sf_half_ppr_when_needed(
+def test_public_runtime_uses_synthetic_sf_ppr_when_observed_market_is_missing(
     tmp_path,
     mock_client,
     canonical_league_ids,
@@ -213,8 +267,9 @@ def test_public_runtime_falls_back_from_sf_ppr_to_sf_half_ppr_when_needed(
     )
 
     assert analysis["requested_canonical_key"] == "sf_ppr"
-    assert analysis["selected_canonical_key"] == "sf_half_ppr"
-    assert analysis["selected_canonical_fallback"] is True
+    assert analysis["selected_canonical_key"] == "sf_ppr"
+    assert analysis["selected_canonical_fallback"] is False
+    assert analysis["adp_source_metadata"]["synthetic"] is True
 
 
 def test_public_runtime_analyzes_league_without_history(
@@ -254,6 +309,18 @@ def test_public_runtime_analyzes_league_without_history(
     assert analysis["target_environment"]["coverage"] == []
     assert not analysis["results"].empty
     assert analysis["results"]["league_adjusted_adp"].notna().all()
+
+
+def test_three_market_load_synthesizes_sf_ppr_frame(canonical_adp_paths) -> None:
+    three_market_paths = {key: value for key, value in canonical_adp_paths.items() if key != "sf_ppr"}
+
+    frames, summary = load_source_adp_by_environment(canonical_adp_paths=three_market_paths)
+
+    assert set(frames) == {"1qb_half_ppr", "1qb_ppr", "sf_half_ppr", "sf_ppr"}
+    assert summary["formats"]["sf_ppr"]["synthetic"] is True
+    assert not frames["sf_ppr"].empty
+    assert frames["sf_ppr"]["canonical_format"].eq("sf_ppr").all()
+    assert frames["sf_ppr"]["adp_source_field"].eq("synthetic_complete_square").all()
 
 
 def test_increasing_team_count_pushes_replacement_deeper(mock_client) -> None:

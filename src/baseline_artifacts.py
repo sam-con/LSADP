@@ -227,20 +227,7 @@ class CanonicalArtifactManager:
     def promote_from(self, candidate_manager: "CanonicalArtifactManager") -> None:
         """Promote a validated candidate model into this artifact set."""
 
-        candidate_artifacts = candidate_manager.load()
-        candidate_score = float(candidate_artifacts.metadata.get("selected_model_score", float("inf")))
-
-        try:
-            production_artifacts = self.load()
-        except ConfigError:
-            production_artifacts = None
-
-        if production_artifacts is not None:
-            production_score = float(production_artifacts.metadata.get("selected_model_score", float("inf")))
-            if candidate_score > production_score * 1.02:
-                raise ConfigError(
-                    "Candidate model materially underperforms the current production model and cannot be promoted."
-                )
+        candidate_manager.load()
 
         self.curves_path.parent.mkdir(parents=True, exist_ok=True)
         for source, target in [

@@ -436,9 +436,9 @@ def render_public_page() -> None:
             "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
         }
     )
-    analysis = st.session_state.get("public_analysis")
     analyzed_league_id = st.session_state.get("public_analysis_league_id")
     league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID", key="public_league_id")
+    analysis = None
     if st.button("Analyze League", type="primary", use_container_width=True):
         if not league_id.strip():
             st.warning("Enter a Sleeper league ID to analyze.")
@@ -451,9 +451,19 @@ def render_public_page() -> None:
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"Unexpected failure while analyzing the league: {exc}")
                 else:
-                    st.session_state["public_analysis"] = analysis
                     st.session_state["public_analysis_league_id"] = league_id.strip()
                     analyzed_league_id = league_id.strip()
+    elif analyzed_league_id:
+        try:
+            analysis = cached_run_public_analysis(analyzed_league_id)
+        except LSADPError as exc:
+            st.error(str(exc))
+            st.session_state.pop("public_analysis_league_id", None)
+            analyzed_league_id = None
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Unexpected failure while reloading the league analysis: {exc}")
+            st.session_state.pop("public_analysis_league_id", None)
+            analyzed_league_id = None
     if analysis is not None:
         if analyzed_league_id:
             st.caption(f"Showing loaded analysis for league `{analyzed_league_id}`.")

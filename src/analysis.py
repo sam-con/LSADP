@@ -136,6 +136,28 @@ def load_league_environment(
     )
 
     player_weeks = pd.concat(seasonal_frames, ignore_index=True)
+    return build_environment_from_player_weeks(
+        league=league,
+        player_weeks=player_weeks,
+        coverage=coverage,
+        historical_leagues=historical_leagues,
+        modeling_config=modeling_config,
+        replacement_method=replacement_method,
+    )
+
+
+def build_environment_from_player_weeks(
+    league: LeagueSettings,
+    player_weeks: pd.DataFrame,
+    coverage: list[HistoricalCoverage],
+    historical_leagues: list[HistoricalLeagueSummary],
+    modeling_config: ModelingConfig | None = None,
+    replacement_method: str = "starter_demand",
+) -> dict[str, Any]:
+    """Build a scoring/roster environment from prepared historical player-week data."""
+
+    modeling_config = modeling_config or default_modeling_config()
+
     season_player_ppg = build_season_player_ppg(player_weeks, min_games=modeling_config.min_games)
     empirical_curve = aggregate_rank_curves(
         season_player_ppg=season_player_ppg,

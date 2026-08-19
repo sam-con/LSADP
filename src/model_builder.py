@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from src.adp import ADPDataProvider, FantasyCalcADPProvider, match_players_by_identity
-from src.analysis import default_modeling_config, load_league_environment
+from src.analysis import build_environment_from_player_weeks, default_modeling_config, load_league_environment
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.calibration import calibrate_market_values
 from src.canonical import (
@@ -24,7 +24,8 @@ from src.canonical import (
     validate_canonical_configuration,
 )
 from src.config import APP_VERSION, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES
-from src.models import ConfigError, ModelingConfig
+from src.donors import build_historical_player_weeks_from_donors, load_saved_donor_configuration
+from src.models import ConfigError, HistoricalLeagueSummary, ModelingConfig
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
@@ -177,6 +178,76 @@ def build_canonical_environment_bundle(
         validate_environment_identity(environment_key, environment["league"])
         bundle[environment_key] = environment
     return bundle
+
+
+def load_canonical_league_settings_bundle(
+    client: SleeperClient,
+    canonical_leagues: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Load only the canonical league settings without requiring historical chains."""
+
+    canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
+    validate_canonical_configuration(canonical_leagues)
+    bundle: dict[str, Any] = {}
+    for environment_key in CANONICAL_ENVIRONMENTS:
+        league = client.get_league(canonical_leagues[environment_key])
+        validate_environment_identity(environment_key, league)
+        bundle[environment_key] = {"league": league}
+    return bundle
+
+
+def build_canonical_environment_bundle_from_donors(
+    client: SleeperClient,
+    canonical_leagues: dict[str, str] | None = None,
+    donor_configuration: pd.DataFrame | None = None,
+    modeling_config: ModelingConfig | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Build six canonical environments using donor scoring history plus canonical roster settings."""
+
+    canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
+    modeling_config = modeling_config or default_modeling_config()
+    donor_configuration = donor_configuration if donor_configuration is not None else load_saved_donor_configuration()[0]
+    canonical_settings = load_canonical_league_settings_bundle(client, canonical_leagues)
+    donor_history = build_historical_player_weeks_from_donors(
+        client,
+        donor_configuration,
+        modeling_config=modeling_config,
+    )
+
+    historical_stub_by_format = {
+        "standard": [HistoricalLeagueSummary(league_id="donor_standard", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_standard", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_standard", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_standard", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
+        "half_ppr": [HistoricalLeagueSummary(league_id="donor_half_ppr", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
+                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
+        "ppr": [HistoricalLeagueSummary(league_id="donor_ppr", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
+                HistoricalLeagueSummary(league_id="donor_ppr", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
+                HistoricalLeagueSummary(league_id="donor_ppr", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
+                HistoricalLeagueSummary(league_id="donor_ppr", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
+    }
+
+    bundle: dict[str, dict[str, Any]] = {}
+    for environment_key in CANONICAL_ENVIRONMENTS:
+        league = canonical_settings[environment_key]["league"]
+        scoring_format = detect_reception_format(league)
+        player_weeks = donor_history["player_weeks_by_format"][scoring_format]
+        coverage = donor_history["coverage_by_format"][scoring_format]
+        environment = build_environment_from_player_weeks(
+            league=league,
+            player_weeks=player_weeks,
+            coverage=coverage,
+            historical_leagues=historical_stub_by_format[scoring_format],
+            modeling_config=modeling_config,
+            replacement_method="starter_demand",
+        )
+        validate_environment_identity(environment_key, environment["league"])
+        environment["historical_source"] = "donor_leagues"
+        environment["historical_scoring_format"] = scoring_format
+        bundle[environment_key] = environment
+    return bundle, donor_history
 
 
 def candidate_model_specs() -> list[dict[str, Any]]:
@@ -438,6 +509,7 @@ def build_candidate_model(
     canonical_leagues: dict[str, str] | None = None,
     canonical_adp_paths: dict[str, Path] | None = None,
     adp_provider: FantasyCalcADPProvider | None = None,
+    donor_configuration: pd.DataFrame | None = None,
     modeling_config: ModelingConfig | None = None,
     today: date | None = None,
     force_adp_refresh: bool = False,
@@ -448,12 +520,25 @@ def build_candidate_model(
     validate_canonical_configuration(canonical_leagues, canonical_adp_paths)
     modeling_config = modeling_config or default_modeling_config()
 
-    environment_bundle = build_canonical_environment_bundle(
-        client=client,
-        canonical_leagues=canonical_leagues,
-        modeling_config=modeling_config,
-        today=today,
-    )
+    donor_history_bundle: dict[str, Any] | None = None
+    donor_metadata: dict[str, Any] = {}
+    try:
+        environment_bundle, donor_history_bundle = build_canonical_environment_bundle_from_donors(
+            client=client,
+            canonical_leagues=canonical_leagues,
+            donor_configuration=donor_configuration,
+            modeling_config=modeling_config,
+        )
+        donor_metadata = {"source": "saved_donors", "league_records": donor_history_bundle["league_records"].to_dict(orient="records")}
+    except ConfigError:
+        if donor_configuration is not None:
+            raise
+        environment_bundle = build_canonical_environment_bundle(
+            client=client,
+            canonical_leagues=canonical_leagues,
+            modeling_config=modeling_config,
+            today=today,
+        )
     canonical_team_count, canonical_team_counts_by_environment = validate_canonical_team_counts(environment_bundle)
     source_adp_by_environment, adp_source_summary = load_source_adp_by_environment(
         environment_bundle,
@@ -572,6 +657,7 @@ def build_candidate_model(
             environment_key: [league.season for league in environment_bundle[environment_key]["historical_leagues"]]
             for environment_key in CANONICAL_ENVIRONMENTS
         },
+        "historical_donor_source": donor_metadata,
         "validation_complete": True,
     }
 
@@ -582,6 +668,7 @@ def build_candidate_model(
 
     return {
         "environment_bundle": environment_bundle,
+        "donor_history_bundle": donor_history_bundle,
         "source_adp_by_environment": source_adp_by_environment,
         "model_parameters": pd.DataFrame(spec_rows).sort_values("composite_score").reset_index(drop=True),
         "selected_spec": best_spec,

@@ -24,6 +24,12 @@ from src.charts import (
     build_validation_scatter,
 )
 from src.config import APP_VERSION, CANONICAL_LEAGUES, SHOW_DEVELOPMENT_PAGE
+from src.donors import (
+    discover_historical_donors,
+    donor_matrix_summary,
+    load_saved_donor_configuration,
+    save_donor_configuration,
+)
 from src.model_builder import (
     build_aggregated_positional_errors,
     build_candidate_model,
@@ -39,7 +45,7 @@ from src.utils import material_scoring_differences
 
 st.set_page_config(page_title="League-Specific ADP", page_icon="🏈", layout="wide")
 
-TODAY = date(2026, 8, 18)
+TODAY = date(2026, 8, 19)
 
 CUSTOM_CSS = """
 <style>
@@ -145,6 +151,26 @@ def cached_build_candidate_model(canonical_leagues_json: str) -> dict[str, Any]:
     return build_candidate_model(
         client=SleeperClient(),
         canonical_leagues=canonical_leagues,
+        today=TODAY,
+    )
+
+
+def run_donor_discovery(
+    canonical_leagues_json: str,
+    seed_user: str,
+    max_users: int,
+    max_leagues: int,
+    preferred_donors_per_cell: int,
+    max_depth: int,
+) -> dict[str, Any]:
+    return discover_historical_donors(
+        client=SleeperClient(),
+        canonical_leagues=json.loads(canonical_leagues_json),
+        seed_user=seed_user,
+        max_users=max_users,
+        max_leagues=max_leagues,
+        preferred_donors_per_cell=preferred_donors_per_cell,
+        max_depth=max_depth,
         today=TODAY,
     )
 
@@ -531,6 +557,89 @@ def render_fantasycalc_section(canonical_leagues_json: str) -> None:
         st.dataframe(player_market_lookup(latest_status, selected_player), use_container_width=True, hide_index=True)
 
 
+def render_donor_discovery_section(canonical_leagues_json: str) -> None:
+    st.markdown("## Historical Donor Discovery")
+
+    seed_user = st.text_input("Seed Sleeper Username / User ID", value="", key="donor_seed_user")
+    controls = st.columns(4)
+    max_users = int(controls[0].number_input("Maximum users", min_value=10, max_value=2000, value=200, step=10))
+    max_leagues = int(controls[1].number_input("Maximum leagues", min_value=50, max_value=5000, value=1000, step=50))
+    preferred_donors = int(controls[2].number_input("Donors per cell", min_value=1, max_value=10, value=3, step=1))
+    max_depth = int(controls[3].number_input("Maximum graph depth", min_value=1, max_value=6, value=3, step=1))
+
+    action_cols = st.columns(3)
+    if action_cols[0].button("Discover Historical Donor Leagues", type="primary", use_container_width=True):
+        if not seed_user.strip():
+            st.warning("Enter a seed Sleeper username or user ID to discover donor leagues.")
+        else:
+            with st.spinner("Crawling the Sleeper user graph, validating candidate donors, and building the donor matrix..."):
+                try:
+                    discovery = run_donor_discovery(
+                        canonical_leagues_json=canonical_leagues_json,
+                        seed_user=seed_user.strip(),
+                        max_users=max_users,
+                        max_leagues=max_leagues,
+                        preferred_donors_per_cell=preferred_donors,
+                        max_depth=max_depth,
+                    )
+                    st.session_state["donor_discovery"] = discovery
+                except LSADPError as exc:
+                    st.error(str(exc))
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Unexpected donor discovery failure: {exc}")
+
+    if action_cols[1].button("Save Donor Configuration", use_container_width=True):
+        discovery = st.session_state.get("donor_discovery")
+        if discovery is None:
+            st.warning("Run donor discovery first, then save the selected donors.")
+        else:
+            metadata = {
+                "saved_at": TODAY.isoformat(),
+                "crawl_stats": discovery["crawl_stats"],
+                "signatures": discovery["signatures"],
+                "preferred_donors_per_cell": discovery["preferred_donors_per_cell"],
+                "required_seasons": discovery["required_seasons"],
+            }
+            save_donor_configuration(discovery["accepted"], metadata=metadata)
+            st.success("Historical donor configuration saved to disk.")
+
+    if action_cols[2].button("Reload Saved Donors", use_container_width=True):
+        try:
+            donors, metadata = load_saved_donor_configuration()
+        except LSADPError as exc:
+            st.error(str(exc))
+        else:
+            st.session_state["saved_donors"] = {"donors": donors, "metadata": metadata}
+            st.success("Saved donor configuration reloaded.")
+
+    discovery = st.session_state.get("donor_discovery")
+    if discovery is not None:
+        st.markdown("### Donor Matrix")
+        st.dataframe(discovery["matrix"], use_container_width=True, hide_index=True)
+        st.markdown("### Selected Donors")
+        st.dataframe(discovery["accepted"], use_container_width=True, hide_index=True)
+        if not discovery["rejected"].empty:
+            st.markdown("### Rejected Donor Candidates")
+            st.dataframe(discovery["rejected"], use_container_width=True, hide_index=True)
+        st.markdown("### Discovery Progress")
+        st.write(discovery["crawl_stats"])
+
+    saved = st.session_state.get("saved_donors")
+    if saved is None:
+        try:
+            donors, metadata = load_saved_donor_configuration()
+            saved = {"donors": donors, "metadata": metadata}
+            st.session_state["saved_donors"] = saved
+        except ConfigError:
+            saved = None
+    if saved is not None:
+        st.markdown("### Saved Donor Configuration")
+        preferred = int(saved["metadata"].get("preferred_donors_per_cell", 3)) if saved["metadata"] else 3
+        required_seasons = saved["metadata"].get("required_seasons", [2022, 2023, 2024, 2025]) if saved["metadata"] else [2022, 2023, 2024, 2025]
+        st.dataframe(donor_matrix_summary(saved["donors"], required_seasons, preferred), use_container_width=True, hide_index=True)
+        st.dataframe(saved["donors"], use_container_width=True, hide_index=True)
+
+
 def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
     selected_validation = bundle["selected_validation"].copy()
     selected_validation["source_label"] = selected_validation["source_environment"].map(CANONICAL_LABELS)
@@ -579,6 +688,7 @@ def render_development_page() -> None:
     leagues_json = json.dumps(canonical_leagues, sort_keys=True)
 
     render_fantasycalc_section(leagues_json)
+    render_donor_discovery_section(leagues_json)
 
     st.markdown("## Model Builder")
     build_col, validate_col, promote_col = st.columns(3)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SHOW_DEVELOPMENT_PAGE = True
+SHOW_DEVELOPMENT_PAGE = False
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -14,6 +14,8 @@ CANDIDATE_MODEL_DIR = BASELINE_DIR / "candidate"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "validation"
 ADP_CACHE_DIR = DATA_DIR / "adp_cache"
 ADP_CACHE_METADATA_FILE = ADP_CACHE_DIR / "metadata.json"
+HISTORICAL_DONOR_FILE = BASELINE_DIR / "historical_donor_leagues.csv"
+HISTORICAL_DONOR_METADATA_FILE = BASELINE_DIR / "historical_donor_metadata.json"
 
 ADP_1QB_PATH = DATA_DIR / "adp_1qb.csv"
 ADP_SUPERFLEX_PATH = DATA_DIR / "adp_superflex.csv"
@@ -77,6 +79,7 @@ REGULAR_SEASON_WEEKS = tuple(range(1, 19))
 CORE_POSITIONS = ("QB", "RB", "WR", "TE")
 FLEX_POSITIONS = {"RB", "WR", "TE"}
 SUPERFLEX_POSITIONS = {"QB", "RB", "WR", "TE"}
+SCORING_FORMATS = ("standard", "half_ppr", "ppr")
 
 DEFAULT_MIN_GAMES = 4
 DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION = {

@@ -135,6 +135,9 @@ class MockSleeperClient:
     leagues: dict[str, dict[str, Any]]
     matchups: dict[tuple[str, int], list[dict[str, Any]]]
     players_payload: dict[str, dict[str, Any]]
+    users: dict[str, dict[str, Any]] | None = None
+    user_leagues: dict[tuple[str, int], list[str]] | None = None
+    league_users: dict[str, list[dict[str, Any]]] | None = None
 
     def get_league(self, league_id: str):
         from src.models import SleeperAPIError
@@ -149,6 +152,25 @@ class MockSleeperClient:
 
     def get_players(self, sport: str = "nfl"):
         return self.players_payload
+
+    def get_user(self, username_or_user_id: str):
+        from src.models import SleeperAPIError
+
+        users = self.users or {}
+        if username_or_user_id not in users:
+            raise SleeperAPIError(f"Unknown user {username_or_user_id}")
+        return users[username_or_user_id]
+
+    def get_user_leagues(self, user_id: str, sport: str = "nfl", season: int | str = 2026):
+        from src.models import SleeperAPIError
+
+        league_ids = (self.user_leagues or {}).get((str(user_id), int(season)))
+        if league_ids is None:
+            raise SleeperAPIError(f"Unknown leagues for user {user_id} season {season}")
+        return [self.get_league(league_id) for league_id in league_ids]
+
+    def get_league_users(self, league_id: str):
+        return (self.league_users or {}).get(str(league_id), [])
 
 
 @pytest.fixture

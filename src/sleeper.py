@@ -37,6 +37,24 @@ class SleeperClient:
         payload = self._get_json(f"/league/{league_id}")
         return parse_league_settings(payload)
 
+    def get_user(self, username_or_user_id: str) -> dict[str, Any]:
+        payload = self._get_json(f"/user/{username_or_user_id}")
+        if not isinstance(payload, dict):
+            raise SleeperAPIError(f"Sleeper returned malformed user data for {username_or_user_id}")
+        return payload
+
+    def get_user_leagues(self, user_id: str, sport: str = "nfl", season: int | str = 2026) -> list[LeagueSettings]:
+        payload = self._get_json(f"/user/{user_id}/leagues/{sport}/{season}")
+        if not isinstance(payload, list):
+            raise SleeperAPIError(f"Sleeper returned malformed league list for user {user_id}, season {season}")
+        return [parse_league_settings(item) for item in payload]
+
+    def get_league_users(self, league_id: str) -> list[dict[str, Any]]:
+        payload = self._get_json(f"/league/{league_id}/users")
+        if not isinstance(payload, list):
+            raise SleeperAPIError(f"Sleeper returned malformed user list for league {league_id}")
+        return payload
+
     def get_matchups(self, league_id: str, week: int) -> list[dict[str, Any]]:
         payload = self._get_json(f"/league/{league_id}/matchups/{week}")
         if not isinstance(payload, list):
@@ -94,4 +112,3 @@ def as_historical_summary(league: LeagueSettings) -> HistoricalLeagueSummary:
         previous_league_id=payload["previous_league_id"],
         playoff_week_start=payload["playoff_week_start"],
     )
-

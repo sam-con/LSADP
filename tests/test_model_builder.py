@@ -30,20 +30,41 @@ def _manager(root: Path, name: str) -> CanonicalArtifactManager:
     )
 
 
+def donor_configuration_frame() -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for season, league_id, scoring_format in [
+        (2022, "half2022", "half_ppr"),
+        (2023, "half2023", "half_ppr"),
+        (2024, "half2024", "half_ppr"),
+        (2025, "half2025", "half_ppr"),
+        (2022, "2022", "ppr"),
+        (2023, "2023", "ppr"),
+        (2024, "2024", "ppr"),
+        (2025, "2025", "ppr"),
+    ]:
+        rows.append({"season": season, "scoring_format": scoring_format, "league_id": league_id, "selected": True})
+    return pd.DataFrame(rows)
+
+
 def test_invalid_canonical_league_identity_fails_clearly(mock_client) -> None:
     environment = {"league": mock_client.get_league("2026")}
     with pytest.raises(ConfigError):
-        validate_environment_identity("1qb_standard", environment["league"])
+        validate_environment_identity("1qb_half_ppr", environment["league"])
 
 
-def test_candidate_build_generates_exactly_thirty_directed_validations(
+def test_candidate_build_generates_exactly_twelve_directed_validations(
     mock_client,
     canonical_league_ids,
     canonical_adp_paths,
 ) -> None:
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     selected = bundle["selected_validation"]
-    assert len(selected) == 30
+    assert len(selected) == 12
     assert set(selected["transform_type"]) == {"Scoring-only", "Scarcity-only", "Combined"}
 
 
@@ -55,7 +76,12 @@ def test_candidate_build_does_not_overwrite_production_files(
 ) -> None:
     candidate_manager = _manager(tmp_path, "candidate")
     production_manager = _manager(tmp_path, "production")
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     save_candidate_model(candidate_manager, bundle)
     assert candidate_manager.curves_path.exists()
     assert not production_manager.curves_path.exists()
@@ -94,7 +120,12 @@ def test_successful_promotion_writes_expected_artifacts(
 ) -> None:
     candidate_manager = _manager(tmp_path, "candidate")
     production_manager = _manager(tmp_path, "production")
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     save_candidate_model(candidate_manager, bundle)
     promote_candidate_model(candidate_manager, production_manager)
     production = production_manager.load()
@@ -109,7 +140,12 @@ def test_saved_model_reloads_deterministically(
     canonical_adp_paths,
 ) -> None:
     candidate_manager = _manager(tmp_path, "candidate")
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     save_candidate_model(candidate_manager, bundle)
     first = candidate_manager.load()
     second = candidate_manager.load()
@@ -142,7 +178,12 @@ def test_directionality_1qb_to_sf_materially_raises_qb_relative_value(
     canonical_league_ids,
     canonical_adp_paths,
 ) -> None:
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     source_adp = bundle["source_adp_by_environment"]["1qb_ppr"]
     prediction = predict_between_canonical_environments(
         "1qb_ppr",
@@ -162,7 +203,12 @@ def test_directionality_sf_to_1qb_lowers_qb_relative_value(
     canonical_league_ids,
     canonical_adp_paths,
 ) -> None:
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
     source_adp = bundle["source_adp_by_environment"]["sf_ppr"]
     prediction = predict_between_canonical_environments(
         "sf_ppr",
@@ -177,17 +223,22 @@ def test_directionality_sf_to_1qb_lowers_qb_relative_value(
     assert qb_change < rb_change
 
 
-def test_standard_to_ppr_behaves_directionally_sensibly(
+def test_half_ppr_to_ppr_behaves_directionally_sensibly(
     mock_client,
     canonical_league_ids,
     canonical_adp_paths,
 ) -> None:
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, canonical_adp_paths=canonical_adp_paths)
-    source_adp = bundle["source_adp_by_environment"]["1qb_standard"]
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
+    source_adp = bundle["source_adp_by_environment"]["1qb_half_ppr"]
     prediction = predict_between_canonical_environments(
-        "1qb_standard",
+        "1qb_half_ppr",
         "1qb_ppr",
-        bundle["environment_bundle"]["1qb_standard"],
+        bundle["environment_bundle"]["1qb_half_ppr"],
         bundle["environment_bundle"]["1qb_ppr"],
         source_adp,
         {"model_name": "Curve Only", "metric_mode": "expected_ppg", "replacement_method": "starter_demand", "utility_transform": "neg_log", "weight_power": 1.0},

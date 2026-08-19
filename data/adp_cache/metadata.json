@@ -1,0 +1,152 @@
+{
+  "cache_ttl_hours": 24,
+  "endpoint": "https://api.fantasycalc.com/values/current",
+  "formats": {
+    "1qb_half_ppr": {
+      "ambiguous_name_keys": [],
+      "cache_file": "1qb_half_ppr.csv",
+      "checksum": "31940eff7ee83b1b16e5362111385cf9b80c2aad6c5a24c9c87c2c1fd53d95f3",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 185,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 1,
+        "numTeams": 12,
+        "ppr": 0.5
+      },
+      "payload_shape": "list",
+      "player_count": 185,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.278073+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    },
+    "1qb_ppr": {
+      "ambiguous_name_keys": [],
+      "cache_file": "1qb_ppr.csv",
+      "checksum": "eb38d01c35ea1c46b79ccb31de8775cd9f96819d0ec72936b1f5a117da61e048",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 185,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 1,
+        "numTeams": 12,
+        "ppr": 1.0
+      },
+      "payload_shape": "list",
+      "player_count": 185,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.347160+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    },
+    "1qb_standard": {
+      "ambiguous_name_keys": [],
+      "cache_file": "1qb_standard.csv",
+      "checksum": "4bf876b056e5b9bf47df09748aede8d0f84bc01ae864161866a2f631c43f3104",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 185,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 1,
+        "numTeams": 12,
+        "ppr": 0.0
+      },
+      "payload_shape": "list",
+      "player_count": 185,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.140617+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    },
+    "sf_half_ppr": {
+      "ambiguous_name_keys": [],
+      "cache_file": "sf_half_ppr.csv",
+      "checksum": "0f06ee0ae650fcf1b9e437581ee7da91b3e1d0804de10151e1cdedcf74f41ae2",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 185,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 2,
+        "numTeams": 12,
+        "ppr": 0.5
+      },
+      "payload_shape": "list",
+      "player_count": 185,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.605684+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    },
+    "sf_ppr": {
+      "ambiguous_name_keys": [],
+      "cache_file": "sf_ppr.csv",
+      "checksum": "a5582977463eb3fa664085598f668f2fa142e9616dd5c774338e57ab172680a5",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 186,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 2,
+        "numTeams": 12,
+        "ppr": 1.0
+      },
+      "payload_shape": "list",
+      "player_count": 186,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.702618+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    },
+    "sf_standard": {
+      "ambiguous_name_keys": [],
+      "cache_file": "sf_standard.csv",
+      "checksum": "3c4ad8c5fa8a1b607097a0bea955b5453d1ae8f9fd32c4612374cbbf45a3f5de",
+      "duplicate_player_ids": [],
+      "endpoint": "https://api.fantasycalc.com/values/current",
+      "fallback_adp_count": 185,
+      "missing_adp_count": 0,
+      "missing_position_count": 0,
+      "parameters": {
+        "includeAdp": "true",
+        "isDynasty": "false",
+        "numQbs": 2,
+        "numTeams": 12,
+        "ppr": 0.0
+      },
+      "payload_shape": "list",
+      "player_count": 185,
+      "request_note": "FantasyCalc did not populate maybeAdp for some players, so overallRank was used as a FantasyCalc-native fallback for those rows.",
+      "retrieved_at": "2026-08-19T03:01:47.445785+00:00",
+      "source": "FantasyCalc",
+      "status": "ok",
+      "team_count": 12
+    }
+  },
+  "last_refresh": "2026-08-19T03:01:47.702618+00:00",
+  "source": "FantasyCalc"
+}

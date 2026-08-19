@@ -34,7 +34,7 @@ def canonical_configuration(
 
 
 def validate_canonical_configuration(leagues: dict[str, str], adp_paths: dict[str, Path] | None = None) -> None:
-    """Ensure all six canonical environments are configured explicitly."""
+    """Ensure all canonical environments are configured explicitly."""
 
     missing_leagues = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if not leagues.get(environment_key)]
     missing_paths = []
@@ -73,9 +73,24 @@ def detect_reception_format(league: LeagueSettings) -> str:
 
 
 def canonical_environment_key_for_league(league: LeagueSettings) -> str:
-    """Select the closest canonical environment key for a target league."""
+    """Select the closest active canonical environment key for a target league."""
 
-    return f"{detect_qb_format(league)}_{detect_reception_format(league)}"
+    qb_format = detect_qb_format(league)
+    reception_value = detect_reception_value(league)
+    candidates = [environment_key for environment_key in CANONICAL_ENVIRONMENTS if environment_key.startswith(f"{qb_format}_")]
+    if not candidates:
+        raise ConfigError(f"No canonical environments are configured for qb format `{qb_format}`.")
+    return min(
+        candidates,
+        key=lambda environment_key: abs(
+            reception_value
+            - {
+                "half_ppr": 0.5,
+                "ppr": 1.0,
+                "standard": 0.0,
+            }[environment_key.split("_", 1)[1]]
+        ),
+    )
 
 
 def classify_transformation_type(source_key: str, target_key: str) -> str:

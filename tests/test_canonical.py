@@ -12,9 +12,8 @@ from src.models import ConfigError
 from src.sleeper import parse_league_settings
 
 
-def test_all_six_canonical_environments_are_required(canonical_adp_paths) -> None:
+def test_all_four_canonical_environments_are_required(canonical_adp_paths) -> None:
     incomplete = {
-        "1qb_standard": "std2026",
         "1qb_half_ppr": "half2026",
     }
     with pytest.raises(ConfigError):
@@ -49,7 +48,7 @@ def test_sf_half_ppr_selects_sf_half_ppr() -> None:
     assert canonical_environment_key_for_league(league) == "sf_half_ppr"
 
 
-def test_1qb_standard_selects_1qb_standard() -> None:
+def test_1qb_standard_selects_nearest_active_half_ppr_anchor() -> None:
     league = parse_league_settings(
         {
             "league_id": "1",
@@ -60,7 +59,7 @@ def test_1qb_standard_selects_1qb_standard() -> None:
             "roster_positions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN"],
         }
     )
-    assert canonical_environment_key_for_league(league) == "1qb_standard"
+    assert canonical_environment_key_for_league(league) == "1qb_half_ppr"
 
 
 def test_unusual_reception_scoring_selects_nearest_canonical_environment() -> None:
@@ -88,17 +87,16 @@ def test_te_premium_does_not_change_base_reception_classification() -> None:
             "roster_positions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN"],
         }
     )
-    assert canonical_environment_key_for_league(league) == "1qb_standard"
+    assert canonical_environment_key_for_league(league) == "1qb_half_ppr"
 
 
-def test_six_environments_generate_exactly_thirty_directed_tests() -> None:
+def test_four_environments_generate_exactly_twelve_directed_tests() -> None:
     pairs = directed_transform_pairs()
-    assert len(pairs) == 30
+    assert len(pairs) == 12
     assert all(source != target for source, target in pairs)
 
 
 def test_transformation_categories_are_classified_correctly() -> None:
     assert classify_transformation_type("1qb_ppr", "1qb_half_ppr") == "Scoring-only"
     assert classify_transformation_type("1qb_ppr", "sf_ppr") == "Scarcity-only"
-    assert classify_transformation_type("1qb_ppr", "sf_standard") == "Combined"
-
+    assert classify_transformation_type("1qb_ppr", "sf_half_ppr") == "Combined"

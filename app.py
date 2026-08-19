@@ -24,11 +24,11 @@ from src.charts import (
     build_validation_scatter,
 )
 from src.config import APP_VERSION, CANONICAL_LEAGUES, SHOW_DEVELOPMENT_PAGE
+from src.config import HISTORICAL_DONOR_FILE
 from src.donors import (
-    discover_historical_donors,
     donor_matrix_summary,
     load_saved_donor_configuration,
-    save_donor_configuration,
+    validate_historical_donor_configuration,
 )
 from src.model_builder import (
     build_aggregated_positional_errors,
@@ -155,22 +155,21 @@ def cached_build_candidate_model(canonical_leagues_json: str) -> dict[str, Any]:
     )
 
 
-def run_donor_discovery(
-    canonical_leagues_json: str,
-    seed_user: str,
-    max_users: int,
-    max_leagues: int,
-    preferred_donors_per_cell: int,
-    max_depth: int,
-) -> dict[str, Any]:
-    return discover_historical_donors(
+@st.cache_data(show_spinner=False)
+def cached_validate_historical_donors(canonical_leagues_json: str) -> dict[str, Any]:
+    return validate_historical_donor_configuration(
         client=SleeperClient(),
         canonical_leagues=json.loads(canonical_leagues_json),
-        seed_user=seed_user,
-        max_users=max_users,
-        max_leagues=max_leagues,
-        preferred_donors_per_cell=preferred_donors_per_cell,
-        max_depth=max_depth,
+        today=TODAY,
+    )
+
+
+def validate_historical_donors_live(
+    canonical_leagues_json: str,
+) -> dict[str, Any]:
+    return validate_historical_donor_configuration(
+        client=SleeperClient(),
+        canonical_leagues=json.loads(canonical_leagues_json),
         today=TODAY,
     )
 
@@ -413,7 +412,7 @@ def render_public_page() -> None:
     except ConfigError as exc:
         st.error(str(exc))
         st.info(
-            "Configure the six canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
+            "Configure the four canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
             "needed, build a candidate model, and promote it to production. FantasyCalc ADP will refresh through "
             "the daily cache."
         )
@@ -502,7 +501,7 @@ def render_fantasycalc_section(canonical_leagues_json: str) -> None:
 
     refresh_col, info_col = st.columns([1, 2])
     if refresh_col.button("Refresh FantasyCalc ADP", use_container_width=True):
-        with st.spinner("Refreshing all six FantasyCalc canonical markets and updating the persistent cache..."):
+        with st.spinner("Refreshing all four FantasyCalc canonical markets and updating the persistent cache..."):
             try:
                 status_bundle = load_canonical_adp_status(canonical_leagues_json, force_refresh=True)
                 st.session_state["fantasycalc_status"] = status_bundle
@@ -553,91 +552,75 @@ def render_fantasycalc_section(canonical_leagues_json: str) -> None:
         {player_name for frame in latest_status["frames"].values() for player_name in frame["player_name"].tolist()}
     )
     if all_players:
-        selected_player = st.selectbox("Inspect FantasyCalc player across all six markets", all_players, key="adp_player_lookup")
+        selected_player = st.selectbox("Inspect FantasyCalc player across all four markets", all_players, key="adp_player_lookup")
         st.dataframe(player_market_lookup(latest_status, selected_player), use_container_width=True, hide_index=True)
 
 
-def render_donor_discovery_section(canonical_leagues_json: str) -> None:
-    st.markdown("## Historical Donor Discovery")
+def render_donor_validation_section(canonical_leagues_json: str) -> None:
+    st.markdown("## Historical Donor Leagues")
+    st.caption(f"Source: `{HISTORICAL_DONOR_FILE.relative_to(HISTORICAL_DONOR_FILE.parent.parent.parent)}`")
 
-    seed_user = st.text_input("Seed Sleeper Username / User ID", value="", key="donor_seed_user")
-    controls = st.columns(4)
-    max_users = int(controls[0].number_input("Maximum users", min_value=10, max_value=2000, value=200, step=10))
-    max_leagues = int(controls[1].number_input("Maximum leagues", min_value=50, max_value=5000, value=1000, step=50))
-    preferred_donors = int(controls[2].number_input("Donors per cell", min_value=1, max_value=10, value=3, step=1))
-    max_depth = int(controls[3].number_input("Maximum graph depth", min_value=1, max_value=6, value=3, step=1))
+    validate_col, reload_col = st.columns(2)
+    if validate_col.button("Load / Validate Donor Leagues", type="primary", use_container_width=True):
+        with st.spinner("Loading the curated donor config, validating each donor against Sleeper, and measuring historical coverage..."):
+            try:
+                bundle = validate_historical_donors_live(canonical_leagues_json)
+                st.session_state["validated_donors"] = bundle
+                cached_validate_historical_donors.clear()
+                cached_build_candidate_model.clear()
+            except LSADPError as exc:
+                st.error(str(exc))
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Unexpected donor validation failure: {exc}")
 
-    action_cols = st.columns(3)
-    if action_cols[0].button("Discover Historical Donor Leagues", type="primary", use_container_width=True):
-        if not seed_user.strip():
-            st.warning("Enter a seed Sleeper username or user ID to discover donor leagues.")
-        else:
-            with st.spinner("Crawling the Sleeper user graph, validating candidate donors, and building the donor matrix..."):
-                try:
-                    discovery = run_donor_discovery(
-                        canonical_leagues_json=canonical_leagues_json,
-                        seed_user=seed_user.strip(),
-                        max_users=max_users,
-                        max_leagues=max_leagues,
-                        preferred_donors_per_cell=preferred_donors,
-                        max_depth=max_depth,
-                    )
-                    st.session_state["donor_discovery"] = discovery
-                except LSADPError as exc:
-                    st.error(str(exc))
-                except Exception as exc:  # noqa: BLE001
-                    st.error(f"Unexpected donor discovery failure: {exc}")
-
-    if action_cols[1].button("Save Donor Configuration", use_container_width=True):
-        discovery = st.session_state.get("donor_discovery")
-        if discovery is None:
-            st.warning("Run donor discovery first, then save the selected donors.")
-        else:
-            metadata = {
-                "saved_at": TODAY.isoformat(),
-                "crawl_stats": discovery["crawl_stats"],
-                "signatures": discovery["signatures"],
-                "preferred_donors_per_cell": discovery["preferred_donors_per_cell"],
-                "required_seasons": discovery["required_seasons"],
-            }
-            save_donor_configuration(discovery["accepted"], metadata=metadata)
-            st.success("Historical donor configuration saved to disk.")
-
-    if action_cols[2].button("Reload Saved Donors", use_container_width=True):
+    if reload_col.button("Reload Cached Validation", use_container_width=True):
         try:
-            donors, metadata = load_saved_donor_configuration()
+            bundle = cached_validate_historical_donors(canonical_leagues_json)
+            st.session_state["validated_donors"] = bundle
+            st.success("Historical donors reloaded from the configured CSV.")
         except LSADPError as exc:
             st.error(str(exc))
-        else:
-            st.session_state["saved_donors"] = {"donors": donors, "metadata": metadata}
-            st.success("Saved donor configuration reloaded.")
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Unexpected donor reload failure: {exc}")
 
-    discovery = st.session_state.get("donor_discovery")
-    if discovery is not None:
-        st.markdown("### Donor Matrix")
-        st.dataframe(discovery["matrix"], use_container_width=True, hide_index=True)
-        st.markdown("### Selected Donors")
-        st.dataframe(discovery["accepted"], use_container_width=True, hide_index=True)
-        if not discovery["rejected"].empty:
-            st.markdown("### Rejected Donor Candidates")
-            st.dataframe(discovery["rejected"], use_container_width=True, hide_index=True)
-        st.markdown("### Discovery Progress")
-        st.write(discovery["crawl_stats"])
-
-    saved = st.session_state.get("saved_donors")
-    if saved is None:
+    validated = st.session_state.get("validated_donors")
+    if validated is None:
         try:
-            donors, metadata = load_saved_donor_configuration()
-            saved = {"donors": donors, "metadata": metadata}
-            st.session_state["saved_donors"] = saved
+            validated = cached_validate_historical_donors(canonical_leagues_json)
+            st.session_state["validated_donors"] = validated
         except ConfigError:
-            saved = None
-    if saved is not None:
-        st.markdown("### Saved Donor Configuration")
-        preferred = int(saved["metadata"].get("preferred_donors_per_cell", 3)) if saved["metadata"] else 3
-        required_seasons = saved["metadata"].get("required_seasons", [2022, 2023, 2024, 2025]) if saved["metadata"] else [2022, 2023, 2024, 2025]
-        st.dataframe(donor_matrix_summary(saved["donors"], required_seasons, preferred), use_container_width=True, hide_index=True)
-        st.dataframe(saved["donors"], use_container_width=True, hide_index=True)
+            validated = None
+
+    if validated is None:
+        return
+
+    metadata = validated.get("source_metadata", {})
+    st.write(
+        {
+            "source": metadata.get("source"),
+            "required_seasons": validated.get("required_seasons"),
+            "active_rows": metadata.get("active_rows"),
+            "ignored_standard_rows": metadata.get("ignored_standard_rows"),
+            "ignored_out_of_window_rows": metadata.get("ignored_out_of_window_rows"),
+            "duplicate_rows_removed": metadata.get("duplicate_rows_removed"),
+        }
+    )
+
+    if validated.get("missing_cells"):
+        missing_text = ", ".join(f"{season} {scoring_format}" for season, scoring_format in validated["missing_cells"])
+        st.error(f"Required donor cells are still missing after Sleeper validation: {missing_text}")
+
+    st.markdown("### Donor Matrix")
+    st.dataframe(
+        donor_matrix_summary(validated["accepted"], validated["required_seasons"], required_donors_per_cell=1),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.markdown("### Accepted Donors")
+    st.dataframe(validated["accepted"], use_container_width=True, hide_index=True)
+    if not validated["rejected"].empty:
+        st.markdown("### Rejected Donors")
+        st.dataframe(validated["rejected"], use_container_width=True, hide_index=True)
 
 
 def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
@@ -682,19 +665,19 @@ def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
 
 def render_development_page() -> None:
     st.title("Development")
-    st.caption("Hidden Model Builder for six canonical Sleeper environments, cross-format validation, candidate comparison, and promotion.")
+    st.caption("Hidden model builder for four canonical Sleeper environments, donor-backed history, candidate comparison, and promotion.")
 
     canonical_leagues = canonical_inputs()
     leagues_json = json.dumps(canonical_leagues, sort_keys=True)
 
     render_fantasycalc_section(leagues_json)
-    render_donor_discovery_section(leagues_json)
+    render_donor_validation_section(leagues_json)
 
     st.markdown("## Model Builder")
     build_col, validate_col, promote_col = st.columns(3)
 
     if build_col.button("Build Candidate Model", type="primary", use_container_width=True):
-        with st.spinner("Loading six canonical leagues, validating history, fitting curves, calibrating specs, and saving the candidate..."):
+        with st.spinner("Loading four canonical leagues, validating donor history, fitting curves, calibrating specs, and saving the candidate..."):
             try:
                 bundle = cached_build_candidate_model(leagues_json)
                 save_candidate_model(CanonicalArtifactManager.candidate(), bundle)
@@ -771,7 +754,7 @@ def render_public_page_live() -> None:
     except ConfigError as exc:
         st.error(str(exc))
         st.info(
-            "Configure the six canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
+            "Configure the four canonical Sleeper league IDs in `src/config.py`, enable the Development page if "
             "needed, build a candidate model, and promote it to production. FantasyCalc ADP will refresh through "
             "the daily cache."
         )

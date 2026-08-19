@@ -21,7 +21,7 @@ def make_league_payload(
         "name": f"League {season}",
         "season": str(season),
         "total_rosters": total_rosters,
-        "scoring_settings": scoring_settings or {"rec": 1.0, "pass_td": 4.0, "rec_te": 1.0},
+        "scoring_settings": scoring_settings or {"rec": 1.0, "pass_td": 4.0},
         "roster_positions": roster_positions
         or ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN"],
         "previous_league_id": previous_league_id,
@@ -180,9 +180,9 @@ def players_payload() -> dict[str, dict[str, Any]]:
 
 @pytest.fixture
 def mock_client(players_payload: dict[str, dict[str, Any]]) -> MockSleeperClient:
-    base_scoring = {"rec": 1.0, "pass_td": 4.0, "rec_te": 1.0}
-    half_scoring = {"rec": 0.5, "pass_td": 4.0, "rec_te": 0.5}
-    standard_scoring = {"rec": 0.0, "pass_td": 4.0, "rec_te": 0.0}
+    base_scoring = {"rec": 1.0, "pass_td": 4.0}
+    half_scoring = {"rec": 0.5, "pass_td": 4.0}
+    standard_scoring = {"rec": 0.0, "pass_td": 4.0}
     baseline_positions = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN"]
     leagues = {
         "2026": make_league_payload("2026", 2026, "2025", base_scoring, baseline_positions),
@@ -415,10 +415,8 @@ def generate_canonical_adp_frame(players_payload: dict[str, dict[str, Any]], env
 @pytest.fixture
 def canonical_league_ids() -> dict[str, str]:
     return {
-        "1qb_standard": "std2026",
         "1qb_half_ppr": "half2026",
         "1qb_ppr": "2026",
-        "sf_standard": "sfstd2026",
         "sf_half_ppr": "sfhalf2026",
         "sf_ppr": "sf2026",
     }
@@ -429,10 +427,8 @@ def canonical_adp_frames(players_payload: dict[str, dict[str, Any]]) -> dict[str
     return {
         environment_key: generate_canonical_adp_frame(players_payload, environment_key)
         for environment_key in [
-            "1qb_standard",
             "1qb_half_ppr",
             "1qb_ppr",
-            "sf_standard",
             "sf_half_ppr",
             "sf_ppr",
         ]

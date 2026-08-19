@@ -14,6 +14,22 @@ from src.model_builder import build_candidate_model, run_public_canonical_analys
 from src.models import ConfigError
 
 
+def donor_configuration_frame() -> pd.DataFrame:
+    rows: list[dict[str, object]] = []
+    for season, league_id, scoring_format in [
+        (2022, "half2022", "half_ppr"),
+        (2023, "half2023", "half_ppr"),
+        (2024, "half2024", "half_ppr"),
+        (2025, "half2025", "half_ppr"),
+        (2022, "2022", "ppr"),
+        (2023, "2023", "ppr"),
+        (2024, "2024", "ppr"),
+        (2025, "2025", "ppr"),
+    ]:
+        rows.append({"season": season, "scoring_format": scoring_format, "league_id": league_id, "selected": True})
+    return pd.DataFrame(rows)
+
+
 def sample_fantasycalc_payload(adp_offset: float = 0.0) -> list[dict[str, Any]]:
     return [
         {
@@ -138,17 +154,10 @@ def test_fantasycalc_response_parses_and_reports_diagnostics(tmp_path) -> None:
     assert metadata["status"] == "refreshed"
 
 
-def test_parameter_mapping_covers_all_six_formats() -> None:
-    assert FantasyCalcADPProvider.parameters_for_environment("1qb_standard", 12) == {
-        "isDynasty": "false",
-        "numQbs": 1,
-        "numTeams": 12,
-        "ppr": 0.0,
-        "includeAdp": "true",
-    }
+def test_parameter_mapping_covers_all_four_formats() -> None:
     assert FantasyCalcADPProvider.parameters_for_environment("1qb_half_ppr", 12)["ppr"] == 0.5
     assert FantasyCalcADPProvider.parameters_for_environment("1qb_ppr", 12)["ppr"] == 1.0
-    assert FantasyCalcADPProvider.parameters_for_environment("sf_standard", 12)["numQbs"] == 2
+    assert FantasyCalcADPProvider.parameters_for_environment("sf_half_ppr", 12)["numQbs"] == 2
     assert FantasyCalcADPProvider.parameters_for_environment("sf_half_ppr", 12)["ppr"] == 0.5
     assert FantasyCalcADPProvider.parameters_for_environment("sf_ppr", 12)["ppr"] == 1.0
 
@@ -250,8 +259,13 @@ def test_candidate_model_uses_provider_and_public_runtime_uses_latest_adp(
     canonical_adp_frames,
 ) -> None:
     build_provider = StaticFantasyCalcProvider(canonical_adp_frames)
-    bundle = build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, adp_provider=build_provider)
-    assert len(bundle["selected_validation"]) == 30
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        adp_provider=build_provider,
+        donor_configuration=donor_configuration_frame(),
+    )
+    assert len(bundle["selected_validation"]) == 12
 
     candidate_manager = _manager(tmp_path, "candidate")
     production_manager = _manager(tmp_path, "production")
@@ -279,4 +293,9 @@ def test_identical_canonical_markets_block_calibration(mock_client, canonical_le
     provider = StaticFantasyCalcProvider({environment_key: identical_frame.copy() for environment_key in canonical_league_ids})
 
     with pytest.raises(ConfigError):
-        build_candidate_model(mock_client, canonical_leagues=canonical_league_ids, adp_provider=provider)
+        build_candidate_model(
+            mock_client,
+            canonical_leagues=canonical_league_ids,
+            adp_provider=provider,
+            donor_configuration=donor_configuration_frame(),
+        )

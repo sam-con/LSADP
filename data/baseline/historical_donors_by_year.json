@@ -1,0 +1,58 @@
+{
+  "2022": {
+    "half_ppr": [
+      {
+        "league_id": "784434023157075968",
+        "league_name": "Armchair Football League"
+      }
+    ],
+    "ppr": [
+      {
+        "league_id": "833859421934288896",
+        "league_name": "The Franchise"
+      }
+    ]
+  },
+  "2023": {
+    "half_ppr": [
+      {
+        "league_id": "917970344462954496",
+        "league_name": "Armchair Football League"
+      }
+    ],
+    "ppr": [
+      {
+        "league_id": "916510130160635904",
+        "league_name": "Superflex Dynasty?"
+      }
+    ]
+  },
+  "2024": {
+    "half_ppr": [
+      {
+        "league_id": "1048363806625214464",
+        "league_name": "Armchair Football League"
+      }
+    ],
+    "ppr": [
+      {
+        "league_id": "1067919665374113792",
+        "league_name": "Dynasty 24"
+      }
+    ]
+  },
+  "2025": {
+    "half_ppr": [
+      {
+        "league_id": "1257418138954240000",
+        "league_name": "Across the Pond"
+      }
+    ],
+    "ppr": [
+      {
+        "league_id": "1205017004218519552",
+        "league_name": "Dynasty Bestball SF"
+      }
+    ]
+  }
+}

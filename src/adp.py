@@ -133,10 +133,8 @@ class FantasyCalcADPProvider:
     @staticmethod
     def parameters_for_environment(environment_key: str, num_teams: int) -> dict[str, Any]:
         mapping = {
-            "1qb_standard": {"numQbs": 1, "ppr": 0.0},
             "1qb_half_ppr": {"numQbs": 1, "ppr": 0.5},
             "1qb_ppr": {"numQbs": 1, "ppr": 1.0},
-            "sf_standard": {"numQbs": 2, "ppr": 0.0},
             "sf_half_ppr": {"numQbs": 2, "ppr": 0.5},
             "sf_ppr": {"numQbs": 2, "ppr": 1.0},
         }

@@ -14,7 +14,8 @@ CANDIDATE_MODEL_DIR = BASELINE_DIR / "candidate"
 OUTPUTS_DIR = BASE_DIR / "outputs" / "validation"
 ADP_CACHE_DIR = DATA_DIR / "adp_cache"
 ADP_CACHE_METADATA_FILE = ADP_CACHE_DIR / "metadata.json"
-HISTORICAL_DONOR_FILE = BASELINE_DIR / "historical_donor_leagues.csv"
+HISTORICAL_DONOR_FILE = BASELINE_DIR / "historical_donors_by_year.json"
+HISTORICAL_DONOR_DISCOVERY_EXPORT_FILE = BASE_DIR / "donor_leagues.csv"
 HISTORICAL_DONOR_METADATA_FILE = BASELINE_DIR / "historical_donor_metadata.json"
 
 ADP_1QB_PATH = DATA_DIR / "adp_1qb.csv"
@@ -24,46 +25,36 @@ BASELINE_1QB_LEAGUE_ID = ""
 BASELINE_SF_LEAGUE_ID = ""
 
 CANONICAL_ENVIRONMENTS = (
-    "1qb_standard",
     "1qb_half_ppr",
     "1qb_ppr",
-    "sf_standard",
     "sf_half_ppr",
     "sf_ppr",
 )
 
 CANONICAL_LABELS = {
-    "1qb_standard": "1QB Standard",
     "1qb_half_ppr": "1QB Half-PPR",
     "1qb_ppr": "1QB PPR",
-    "sf_standard": "Superflex Standard",
     "sf_half_ppr": "Superflex Half-PPR",
     "sf_ppr": "Superflex PPR",
 }
 
 CANONICAL_ADP_CACHE_FILES = {
-    "1qb_standard": "1qb_standard.csv",
     "1qb_half_ppr": "1qb_half_ppr.csv",
     "1qb_ppr": "1qb_ppr.csv",
-    "sf_standard": "sf_standard.csv",
     "sf_half_ppr": "sf_half_ppr.csv",
     "sf_ppr": "sf_ppr.csv",
 }
 
 CANONICAL_LEAGUES = {
-    "1qb_standard": "1395458028047720448",
     "1qb_half_ppr": "1395457853489176576",
     "1qb_ppr": "1395452196744622080",
-    "sf_standard": "1395457482700128256",
     "sf_half_ppr": "1395457206857515008",
     "sf_ppr": "1395452598621851648",
 }
 
 CANONICAL_ADP_PATHS = {
-    "1qb_standard": DATA_DIR / "adp_1qb_standard.csv",
     "1qb_half_ppr": DATA_DIR / "adp_1qb_half_ppr.csv",
     "1qb_ppr": DATA_DIR / "adp_1qb_ppr.csv",
-    "sf_standard": DATA_DIR / "adp_sf_standard.csv",
     "sf_half_ppr": DATA_DIR / "adp_sf_half_ppr.csv",
     "sf_ppr": DATA_DIR / "adp_sf_ppr.csv",
 }
@@ -79,7 +70,7 @@ REGULAR_SEASON_WEEKS = tuple(range(1, 19))
 CORE_POSITIONS = ("QB", "RB", "WR", "TE")
 FLEX_POSITIONS = {"RB", "WR", "TE"}
 SUPERFLEX_POSITIONS = {"QB", "RB", "WR", "TE"}
-SCORING_FORMATS = ("standard", "half_ppr", "ppr")
+SCORING_FORMATS = ("half_ppr", "ppr")
 
 DEFAULT_MIN_GAMES = 4
 DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION = {

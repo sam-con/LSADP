@@ -1,4 +1,4 @@
-"""Six-format canonical model building and validation."""
+"""Canonical model building and validation."""
 
 from __future__ import annotations
 
@@ -23,13 +23,17 @@ from src.canonical import (
     directed_transform_pairs,
     validate_canonical_configuration,
 )
-from src.config import APP_VERSION, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES
-from src.donors import build_historical_player_weeks_from_donors, load_saved_donor_configuration
+from src.config import APP_VERSION, CANONICAL_ENVIRONMENTS, CANONICAL_LABELS, CANONICAL_LEAGUES, HISTORICAL_DONOR_FILE
+from src.donors import (
+    build_historical_player_weeks_from_donor_validation,
+    validate_historical_donor_configuration,
+)
 from src.models import ConfigError, HistoricalLeagueSummary, ModelingConfig
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
 from src.vorp import build_vorp_table
+from src.utils import required_completed_seasons
 
 
 def validate_environment_identity(environment_key: str, league) -> None:
@@ -160,7 +164,7 @@ def build_canonical_environment_bundle(
     modeling_config: ModelingConfig | None = None,
     today: date | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Build historical environments for all six canonical leagues."""
+    """Build historical environments for all canonical leagues."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
     validate_canonical_configuration(canonical_leagues)
@@ -201,32 +205,36 @@ def build_canonical_environment_bundle_from_donors(
     canonical_leagues: dict[str, str] | None = None,
     donor_configuration: pd.DataFrame | None = None,
     modeling_config: ModelingConfig | None = None,
+    today: date | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    """Build six canonical environments using donor scoring history plus canonical roster settings."""
+    """Build canonical environments using donor scoring history plus canonical roster settings."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
     modeling_config = modeling_config or default_modeling_config()
-    donor_configuration = donor_configuration if donor_configuration is not None else load_saved_donor_configuration()[0]
+    today = today or date.today()
     canonical_settings = load_canonical_league_settings_bundle(client, canonical_leagues)
-    donor_history = build_historical_player_weeks_from_donors(
+    donor_validation = validate_historical_donor_configuration(
         client,
-        donor_configuration,
+        canonical_leagues,
+        donor_configuration=donor_configuration,
         modeling_config=modeling_config,
+        today=today,
     )
+    donor_history = build_historical_player_weeks_from_donor_validation(donor_validation)
+    required_seasons = required_completed_seasons(today=today, window=4)
 
     historical_stub_by_format = {
-        "standard": [HistoricalLeagueSummary(league_id="donor_standard", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_standard", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_standard", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_standard", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
-        "half_ppr": [HistoricalLeagueSummary(league_id="donor_half_ppr", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
-                     HistoricalLeagueSummary(league_id="donor_half_ppr", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
-        "ppr": [HistoricalLeagueSummary(league_id="donor_ppr", season=2022, scoring_settings={}, roster_positions=[], total_rosters=0),
-                HistoricalLeagueSummary(league_id="donor_ppr", season=2023, scoring_settings={}, roster_positions=[], total_rosters=0),
-                HistoricalLeagueSummary(league_id="donor_ppr", season=2024, scoring_settings={}, roster_positions=[], total_rosters=0),
-                HistoricalLeagueSummary(league_id="donor_ppr", season=2025, scoring_settings={}, roster_positions=[], total_rosters=0)],
+        scoring_format: [
+            HistoricalLeagueSummary(
+                league_id=f"donor_{scoring_format}",
+                season=season,
+                scoring_settings={},
+                roster_positions=[],
+                total_rosters=0,
+            )
+            for season in required_seasons
+        ]
+        for scoring_format in donor_history["player_weeks_by_format"]
     }
 
     bundle: dict[str, dict[str, Any]] = {}
@@ -247,6 +255,7 @@ def build_canonical_environment_bundle_from_donors(
         environment["historical_source"] = "donor_leagues"
         environment["historical_scoring_format"] = scoring_format
         bundle[environment_key] = environment
+    donor_history["validation"] = donor_validation
     return bundle, donor_history
 
 
@@ -405,7 +414,7 @@ def evaluate_candidate_spec(
     environment_bundle: dict[str, dict[str, Any]],
     model_spec: dict[str, Any],
 ) -> tuple[pd.DataFrame, dict[tuple[str, str], pd.DataFrame]]:
-    """Run the 30 directed validations for one candidate spec."""
+    """Run all directed validations for one candidate spec."""
 
     validation_rows: list[dict[str, Any]] = []
     predictions: dict[tuple[str, str], pd.DataFrame] = {}
@@ -514,31 +523,24 @@ def build_candidate_model(
     today: date | None = None,
     force_adp_refresh: bool = False,
 ) -> dict[str, Any]:
-    """Build, validate, and package a six-format candidate model."""
+    """Build, validate, and package a canonical candidate model."""
 
     canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
     validate_canonical_configuration(canonical_leagues, canonical_adp_paths)
     modeling_config = modeling_config or default_modeling_config()
 
-    donor_history_bundle: dict[str, Any] | None = None
-    donor_metadata: dict[str, Any] = {}
-    try:
-        environment_bundle, donor_history_bundle = build_canonical_environment_bundle_from_donors(
-            client=client,
-            canonical_leagues=canonical_leagues,
-            donor_configuration=donor_configuration,
-            modeling_config=modeling_config,
-        )
-        donor_metadata = {"source": "saved_donors", "league_records": donor_history_bundle["league_records"].to_dict(orient="records")}
-    except ConfigError:
-        if donor_configuration is not None:
-            raise
-        environment_bundle = build_canonical_environment_bundle(
-            client=client,
-            canonical_leagues=canonical_leagues,
-            modeling_config=modeling_config,
-            today=today,
-        )
+    environment_bundle, donor_history_bundle = build_canonical_environment_bundle_from_donors(
+        client=client,
+        canonical_leagues=canonical_leagues,
+        donor_configuration=donor_configuration,
+        modeling_config=modeling_config,
+        today=today,
+    )
+    donor_metadata = {
+        "source": str(HISTORICAL_DONOR_FILE) if donor_configuration is None else "provided_dataframe",
+        "league_records": donor_history_bundle["league_records"].to_dict(orient="records"),
+        "validation": donor_history_bundle["validation"]["accepted"].to_dict(orient="records"),
+    }
     canonical_team_count, canonical_team_counts_by_environment = validate_canonical_team_counts(environment_bundle)
     source_adp_by_environment, adp_source_summary = load_source_adp_by_environment(
         environment_bundle,

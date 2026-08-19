@@ -30,7 +30,8 @@ from src.donors import (
     build_historical_player_weeks_from_donor_validation,
     validate_historical_donor_configuration,
 )
-from src.models import ConfigError, HistoricalLeagueSummary, ModelingConfig
+from src.models import ConfigError, HistoricalLeagueSummary, LeagueSettings, ModelingConfig
+from src.replacement import calculate_starter_demand_replacement
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
@@ -775,6 +776,66 @@ def promote_candidate_model(
     production_manager.promote_from(candidate_manager)
 
 
+def build_public_target_environment_from_anchor(
+    *,
+    artifacts,
+    source_key: str,
+    target_league: LeagueSettings,
+) -> dict[str, Any]:
+    """Build a best-effort public target environment without requiring league history."""
+
+    fitted_curves = artifacts.curves[
+        (artifacts.curves["environment_key"] == source_key) & (artifacts.curves["dataset"] == "fitted")
+    ].copy()
+    empirical_curves = artifacts.curves[
+        (artifacts.curves["environment_key"] == source_key) & (artifacts.curves["dataset"] == "empirical")
+    ].copy()
+    if fitted_curves.empty:
+        raise ConfigError(f"Production curves are missing for canonical anchor {source_key}.")
+
+    fitted_curves = fitted_curves.drop(columns=["environment_key"], errors="ignore").reset_index(drop=True)
+    empirical_curves = empirical_curves.drop(columns=["environment_key"], errors="ignore").reset_index(drop=True)
+    if empirical_curves.empty:
+        empirical_curves = fitted_curves.copy()
+        empirical_curves["dataset"] = "empirical"
+
+    evaluated_curves = pd.concat([fitted_curves, empirical_curves], ignore_index=True)
+    starter_demand_replacement = calculate_starter_demand_replacement(target_league, fitted_curves)
+    fallback_historical_replacement = starter_demand_replacement.copy()
+    fallback_historical_replacement["method"] = "Starter Demand Replacement (No History Fallback)"
+
+    replacement_variants = {
+        "starter_demand": starter_demand_replacement,
+        "historical_roster": fallback_historical_replacement,
+    }
+    vorp_variants = {
+        name: build_vorp_table(fitted_curves, replacement_frame)
+        for name, replacement_frame in replacement_variants.items()
+    }
+    selected_replacement_method = str(artifacts.metadata.get("selected_replacement_method", "starter_demand"))
+    replacement = replacement_variants.get(selected_replacement_method, starter_demand_replacement)
+    vorp_table = vorp_variants.get(selected_replacement_method, vorp_variants["starter_demand"])
+
+    return {
+        "league": target_league,
+        "historical_leagues": [],
+        "coverage": [],
+        "player_weeks": pd.DataFrame(),
+        "season_player_ppg": pd.DataFrame(),
+        "empirical_curve": empirical_curves,
+        "candidate_curves": pd.DataFrame(),
+        "selected_curves": pd.DataFrame(),
+        "evaluated_curves": evaluated_curves,
+        "replacement_variants": replacement_variants,
+        "vorp_variants": vorp_variants,
+        "active_replacement_method": selected_replacement_method,
+        "replacement": replacement,
+        "vorp_table": vorp_table,
+        "historical_source": "canonical_anchor_fallback",
+        "public_runtime_mode": "no_history",
+    }
+
+
 def build_public_anchor_projection(
     source_key: str,
     target_environment: dict[str, Any],
@@ -898,23 +959,22 @@ def run_public_canonical_analysis(
 
     artifacts = production_manager.load()
     modeling_config = modeling_config or default_modeling_config()
-    target_environment = load_league_environment(
-        client=client,
-        league_id=target_league_id,
-        modeling_config=modeling_config,
-        today=today,
-        replacement_method="starter_demand",
-    )
+    target_league = client.get_league(target_league_id)
     available_environment_keys = ordered_canonical_environment_keys(
         artifacts.metadata.get("available_canonical_environments") or artifacts.metadata["canonical_environments"].keys()
     )
     requested_anchor_key = canonical_environment_key_for_league(
-        target_environment["league"],
+        target_league,
         environment_keys=CANONICAL_ENVIRONMENTS,
     )
     anchor_key = canonical_environment_key_for_league(
-        target_environment["league"],
+        target_league,
         environment_keys=available_environment_keys,
+    )
+    target_environment = build_public_target_environment_from_anchor(
+        artifacts=artifacts,
+        source_key=anchor_key,
+        target_league=target_league,
     )
     results, source_adp_metadata = build_public_anchor_projection(
         source_key=anchor_key,

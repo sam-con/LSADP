@@ -14,6 +14,7 @@ from src.adp import (
     BeatADPProvider,
     FANTASYCALC_ADP_UNAVAILABLE_MESSAGE,
     FantasyCalcADPProvider,
+    load_saved_canonical_adp_paths,
 )
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.model_builder import build_candidate_model, run_public_canonical_analysis, save_candidate_model
@@ -392,6 +393,40 @@ def test_failed_refresh_without_cache_fails_clearly(tmp_path) -> None:
 
     with pytest.raises(ConfigError):
         provider.load_environment("1qb_ppr", num_teams=12)
+
+
+def test_load_saved_canonical_adp_paths_falls_back_from_stale_absolute_metadata_path(tmp_path, monkeypatch) -> None:
+    actual_path = tmp_path / "adp_1qb_half_ppr.csv"
+    pd.DataFrame(
+        [
+            {
+                "player_name": "RB Player 1",
+                "position": "RB",
+                "team": "T1",
+                "adp": 1.0,
+            }
+        ]
+    ).to_csv(actual_path, index=False)
+    metadata_path = tmp_path / "adp_metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "available_environments": ["1qb_half_ppr"],
+                "formats": {
+                    "1qb_half_ppr": {
+                        "path": r"Z:\streamlit-cloud-only\adp_1qb_half_ppr.csv"
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("src.adp.CANONICAL_ADP_PATHS", {"1qb_half_ppr": actual_path})
+
+    paths, _ = load_saved_canonical_adp_paths(metadata_path=metadata_path)
+
+    assert paths["1qb_half_ppr"] == actual_path
 
 
 def test_manual_refresh_bypasses_fresh_cache(tmp_path) -> None:

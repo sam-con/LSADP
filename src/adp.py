@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -96,6 +97,22 @@ def _read_json_file(path: Path) -> dict[str, Any]:
         raise ConfigError(f"ADP metadata is malformed at {path}: {exc}") from exc
 
 
+def _is_absolute_path_string(value: str) -> bool:
+    return Path(value).is_absolute() or bool(re.match(r"^[A-Za-z]:[\\/]", value))
+
+
+def _resolve_saved_canonical_path(environment_key: str, raw_path: str | None, metadata_path: Path) -> Path:
+    configured_path = CANONICAL_ADP_PATHS[environment_key]
+    if raw_path:
+        if _is_absolute_path_string(raw_path):
+            candidate = Path(raw_path)
+        else:
+            candidate = metadata_path.parent / raw_path
+        if candidate.exists():
+            return candidate
+    return configured_path
+
+
 def load_saved_canonical_adp_paths(
     metadata_path: Path = CANONICAL_ADP_METADATA_FILE,
 ) -> tuple[dict[str, Path], dict[str, Any]]:
@@ -115,7 +132,7 @@ def load_saved_canonical_adp_paths(
     paths: dict[str, Path] = {}
     for environment_key in _ordered_environment_keys(available):
         raw_path = metadata.get("formats", {}).get(environment_key, {}).get("path")
-        path = Path(raw_path) if raw_path else CANONICAL_ADP_PATHS[environment_key]
+        path = _resolve_saved_canonical_path(environment_key, raw_path, metadata_path)
         if not path.exists():
             raise ConfigError(
                 f"Canonical ADP file is missing for {environment_key}: {path}. Refresh BeatADP canonical ADPs from the Development page."
@@ -260,7 +277,7 @@ class BeatADPProvider:
             save_path = self.canonical_paths[environment_key]
             save_path.parent.mkdir(parents=True, exist_ok=True)
             frame.to_csv(save_path, index=False)
-            entry["path"] = str(save_path)
+            entry["path"] = save_path.name if save_path.parent == self.metadata_path.parent else str(save_path)
             frames[environment_key] = frame
             format_entries[environment_key] = entry
 

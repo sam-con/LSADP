@@ -392,21 +392,26 @@ def render_public_results(analysis: dict[str, Any]) -> None:
             }
         )
         st.caption("Public runtime reads the saved BeatADP Sleeper canonical snapshot from disk and does not scrape BeatADP live.")
-        coverage_rows = [
-            {
-                "season": item.season,
-                "weeks_loaded": item.weeks_loaded,
-                "unique_player_weeks": item.unique_player_weeks,
-                "unique_players": item.unique_players,
-                "players_by_position": item.unique_players_by_position,
-                "deepest_rank_by_position": item.deepest_rank_by_position,
-            }
-            for item in target_environment["coverage"]
-        ]
-        st.markdown("**Historical Sleeper Coverage**")
-        st.dataframe(pd.DataFrame(coverage_rows), use_container_width=True, hide_index=True)
-        st.markdown("**Target Curve Fits**")
-        st.dataframe(target_environment["candidate_curves"], use_container_width=True, hide_index=True)
+        if target_environment.get("public_runtime_mode") == "no_history":
+            st.info(
+                "This public analysis used the canonical anchor's saved production curves and recalculated replacement levels from your league's current roster settings. Sleeper league history was not required."
+            )
+        else:
+            coverage_rows = [
+                {
+                    "season": item.season,
+                    "weeks_loaded": item.weeks_loaded,
+                    "unique_player_weeks": item.unique_player_weeks,
+                    "unique_players": item.unique_players,
+                    "players_by_position": item.unique_players_by_position,
+                    "deepest_rank_by_position": item.deepest_rank_by_position,
+                }
+                for item in target_environment["coverage"]
+            ]
+            st.markdown("**Historical Sleeper Coverage**")
+            st.dataframe(pd.DataFrame(coverage_rows), use_container_width=True, hide_index=True)
+            st.markdown("**Target Curve Fits**")
+            st.dataframe(target_environment["candidate_curves"], use_container_width=True, hide_index=True)
         st.markdown("**Target Replacement Levels**")
         st.dataframe(target_environment["replacement_variants"][artifacts.metadata["selected_replacement_method"]], use_container_width=True, hide_index=True)
 
@@ -436,7 +441,7 @@ def render_public_page() -> None:
         if not league_id.strip():
             st.warning("Enter a Sleeper league ID to analyze.")
             return
-        with st.spinner("Selecting the closest canonical anchor, validating four-season history, and transforming ADP..."):
+        with st.spinner("Selecting the closest canonical anchor, applying current league settings, and transforming ADP..."):
             try:
                 analysis = cached_run_public_analysis(league_id.strip())
             except LSADPError as exc:

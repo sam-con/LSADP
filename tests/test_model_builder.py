@@ -217,6 +217,45 @@ def test_public_runtime_falls_back_from_sf_ppr_to_sf_half_ppr_when_needed(
     assert analysis["selected_canonical_fallback"] is True
 
 
+def test_public_runtime_analyzes_league_without_history(
+    tmp_path,
+    mock_client,
+    canonical_league_ids,
+    canonical_adp_paths,
+) -> None:
+    mock_client.leagues["public_no_history"] = {
+        **mock_client.leagues["2026"],
+        "league_id": "public_no_history",
+        "name": "Public No History",
+        "previous_league_id": None,
+        "total_rosters": 14,
+    }
+    candidate_manager = _manager(tmp_path, "candidate")
+    production_manager = _manager(tmp_path, "production")
+    bundle = build_candidate_model(
+        mock_client,
+        canonical_leagues=canonical_league_ids,
+        canonical_adp_paths=canonical_adp_paths,
+        donor_configuration=donor_configuration_frame(),
+    )
+    save_candidate_model(candidate_manager, bundle)
+    promote_candidate_model(candidate_manager, production_manager)
+
+    analysis = run_public_canonical_analysis(
+        client=mock_client,
+        production_manager=production_manager,
+        target_league_id="public_no_history",
+        canonical_adp_paths=canonical_adp_paths,
+    )
+
+    assert analysis["selected_canonical_key"] == "1qb_ppr"
+    assert analysis["target_environment"]["historical_source"] == "canonical_anchor_fallback"
+    assert analysis["target_environment"]["public_runtime_mode"] == "no_history"
+    assert analysis["target_environment"]["coverage"] == []
+    assert not analysis["results"].empty
+    assert analysis["results"]["league_adjusted_adp"].notna().all()
+
+
 def test_increasing_team_count_pushes_replacement_deeper(mock_client) -> None:
     league = mock_client.get_league("2026")
     curves = pd.DataFrame(

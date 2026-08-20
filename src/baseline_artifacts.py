@@ -10,10 +10,6 @@ from typing import Any
 import pandas as pd
 
 from src.config import (
-    BASELINE_CURVES_FILE,
-    BASELINE_METADATA_FILE,
-    BASELINE_MODEL_FILE,
-    BASELINE_REPLACEMENT_FILE,
     CANDIDATE_CANONICAL_LEAGUES_FILE,
     CANDIDATE_HISTORY_CURVE_MODELS_FILE,
     CANDIDATE_HISTORY_CURVES_FILE,
@@ -39,79 +35,7 @@ from src.config import (
     PRODUCTION_MODEL_VALIDATION_FILE,
     PRODUCTION_REPLACEMENT_FILE,
 )
-from src.models import BaselineArtifacts, CanonicalArtifacts, ConfigError
-
-
-class BaselineArtifactManager:
-    """Load, validate, save, and describe baseline artifacts."""
-
-    def __init__(
-        self,
-        curves_path: Path = BASELINE_CURVES_FILE,
-        replacement_path: Path = BASELINE_REPLACEMENT_FILE,
-        model_path: Path = BASELINE_MODEL_FILE,
-        metadata_path: Path = BASELINE_METADATA_FILE,
-    ) -> None:
-        self.curves_path = curves_path
-        self.replacement_path = replacement_path
-        self.model_path = model_path
-        self.metadata_path = metadata_path
-
-    def load(self) -> BaselineArtifacts:
-        self.validate()
-        curves = pd.read_csv(self.curves_path)
-        replacement = pd.read_csv(self.replacement_path)
-        model = pd.read_csv(self.model_path)
-        metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))
-        return BaselineArtifacts(curves=curves, replacement=replacement, model=model, metadata=metadata)
-
-    def validate(self) -> None:
-        missing = [
-            str(path)
-            for path in [self.curves_path, self.replacement_path, self.model_path, self.metadata_path]
-            if not path.exists()
-        ]
-        if missing:
-            raise ConfigError(
-                "Baseline artifacts are missing. Build / refresh the baseline model from the Development page. "
-                f"Missing: {', '.join(missing)}"
-            )
-        metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))
-        required_metadata = {
-            "baseline_1qb_league_id",
-            "baseline_superflex_league_id",
-            "historical_seasons",
-            "generated_timestamp",
-            "model_version",
-        }
-        missing_metadata = sorted(required_metadata - set(metadata))
-        if missing_metadata:
-            raise ConfigError(
-                "Baseline metadata is malformed or incompatible. Missing fields: "
-                f"{', '.join(missing_metadata)}"
-            )
-
-    def save(
-        self,
-        curves: pd.DataFrame,
-        replacement: pd.DataFrame,
-        model: pd.DataFrame,
-        metadata: dict[str, Any],
-    ) -> None:
-        self.curves_path.parent.mkdir(parents=True, exist_ok=True)
-        curves.to_csv(self.curves_path, index=False)
-        replacement.to_csv(self.replacement_path, index=False)
-        model.to_csv(self.model_path, index=False)
-        self.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
-
-    def describe(self) -> dict[str, Any]:
-        artifacts = self.load()
-        return {
-            "curve_rows": len(artifacts.curves),
-            "replacement_rows": len(artifacts.replacement),
-            "model_rows": len(artifacts.model),
-            "metadata": artifacts.metadata,
-        }
+from src.models import CanonicalArtifacts, ConfigError
 
 
 class CanonicalArtifactManager:

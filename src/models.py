@@ -8,6 +8,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.config import (
+    CURVE_SELECTION_RELATIVE_IMPROVEMENT,
+    DEFAULT_COVERAGE_MIN_WEEKS,
+    DEFAULT_MIN_GAMES,
+    DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION,
+    DEFAULT_MIN_PLAYERS_BY_POSITION,
+)
+
 
 class LSADPError(Exception):
     """Base application error."""
@@ -189,3 +197,15 @@ class ModelingConfig:
     min_player_weeks_by_position: dict[str, int] = field(default_factory=dict)
     min_players_by_position: dict[str, int] = field(default_factory=dict)
     curve_selection_relative_improvement: float = 0.02
+
+
+def default_modeling_config() -> ModelingConfig:
+    return ModelingConfig(
+        min_games=DEFAULT_MIN_GAMES,
+        aggregation="median",
+        recency_weights={},
+        min_coverage_weeks=DEFAULT_COVERAGE_MIN_WEEKS,
+        min_player_weeks_by_position=DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION.copy(),
+        min_players_by_position=DEFAULT_MIN_PLAYERS_BY_POSITION.copy(),
+        curve_selection_relative_improvement=CURVE_SELECTION_RELATIVE_IMPROVEMENT,
+    )

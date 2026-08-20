@@ -14,16 +14,14 @@ from src.baseline_artifacts import CanonicalArtifactManager
 from src.canonical import CANONICAL_ENVIRONMENTS, CANONICAL_LABELS
 from src.charts import (
     build_adp_movement_chart,
-    build_current_vs_adjusted_scatter,
     build_curve_chart,
     build_environment_curve_chart,
     build_error_by_bucket_chart,
-    build_positional_impact_chart,
     build_validation_heatmap,
     build_validation_scatter,
 )
 from src.config import APP_VERSION, CANONICAL_LEAGUES, HISTORICAL_DONOR_FILE, SHOW_DEVELOPMENT_PAGE
-from src.donors import donor_matrix_summary, validate_historical_donor_configuration
+from src.donors import load_history_seed_leagues
 from src.history_library import build_league_environment_from_library
 from src.model_builder import (
     build_aggregated_positional_errors,
@@ -34,100 +32,33 @@ from src.model_builder import (
     save_candidate_model,
     summarize_canonical_market_distinctness,
 )
-from src.models import ConfigError, LSADPError, LeagueSettings
+from src.models import ConfigError, LSADPError, SleeperAPIError
+from src.public_ui import (
+    build_biggest_fallers_frame,
+    build_biggest_risers_frame,
+    build_historical_match_details,
+    build_historical_reference_frame,
+    build_player_advanced_frame,
+    build_position_impact_frame,
+    build_public_download_frame,
+    build_public_rankings_frame,
+    filter_results_for_display,
+    league_format_label,
+    missing_modeled_positions,
+    modeled_positions_for_league,
+    public_methodology_lines,
+    public_player_explanation,
+    scoring_detail_lines,
+    scoring_primary_label,
+    scoring_summary_text,
+    starting_lineup_text,
+    unsupported_roster_positions,
+)
 from src.sleeper import SleeperClient
-from src.utils import material_scoring_differences
 
-st.set_page_config(page_title="League-Specific ADP", page_icon="🏈", layout="wide")
+st.set_page_config(page_title="League-Specific ADP", page_icon="football", layout="wide")
 
 TODAY = date(2026, 8, 19)
-
-CUSTOM_CSS = """
-<style>
-    .stApp {
-        background:
-            radial-gradient(circle at top left, rgba(220, 252, 231, 0.7), transparent 35%),
-            radial-gradient(circle at top right, rgba(254, 240, 138, 0.55), transparent 32%),
-            linear-gradient(180deg, #fffdf7 0%, #f7f4ea 100%);
-        color: #1f2937;
-    }
-    .hero {
-        padding: 1.25rem 1.5rem;
-        border-radius: 22px;
-        background: linear-gradient(135deg, #123524 0%, #1f5137 55%, #2f6c48 100%);
-        color: #f8fafc;
-        box-shadow: 0 18px 48px rgba(18, 53, 36, 0.18);
-        margin-bottom: 1rem;
-    }
-    .hero h1 {
-        font-size: 2.4rem;
-        margin: 0 0 0.5rem 0;
-        letter-spacing: -0.03em;
-    }
-    .hero p {
-        margin: 0;
-        font-size: 1rem;
-        max-width: 56rem;
-        line-height: 1.5;
-        color: rgba(248, 250, 252, 0.9);
-    }
-    .summary-card {
-        background: rgba(255, 255, 255, 0.82);
-        border: 1px solid rgba(31, 41, 55, 0.08);
-        border-radius: 18px;
-        padding: 1rem 1.1rem;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-        min-height: 102px;
-    }
-    .summary-label {
-        text-transform: uppercase;
-        font-size: 0.76rem;
-        letter-spacing: 0.08em;
-        color: #6b7280;
-        margin-bottom: 0.35rem;
-    }
-    .summary-value {
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: #111827;
-    }
-</style>
-"""
-
-
-def important_league_settings(league: LeagueSettings) -> dict[str, Any]:
-    starters = league.mandatory_starter_counts()
-    scoring = league.scoring_settings
-    return {
-        "League": league.name,
-        "Teams": league.total_rosters,
-        "QB / RB / WR / TE": f"{starters['QB']} / {starters['RB']} / {starters['WR']} / {starters['TE']}",
-        "FLEX": league.flex_slots(),
-        "SUPER_FLEX": league.superflex_slots(),
-        "Bench": league.bench_size(),
-        "PPR": scoring.get("rec", 0.0),
-        "TE Premium": scoring.get("bonus_rec_te", 0.0) + scoring.get("rec_te", 0.0),
-        "Pass TD": scoring.get("pass_td", 4.0),
-    }
-
-
-def canonical_difference_frame(target: LeagueSettings, canonical_config: dict[str, Any]) -> pd.DataFrame:
-    rows: list[dict[str, Any]] = []
-    canonical_scoring = canonical_config.get("scoring_settings", {})
-    for key, canonical_value, target_value in material_scoring_differences(canonical_scoring, target.scoring_settings):
-        rows.append({"type": "Scoring", "setting": key, "canonical": canonical_value, "target": target_value})
-
-    canonical_positions = canonical_config.get("roster_positions", [])
-    tracked_slots = ["QB", "RB", "WR", "TE", "FLEX", "SUPER_FLEX", "BN"]
-    for slot in tracked_slots:
-        canonical_count = canonical_positions.count(slot)
-        target_count = target.roster_positions.count(slot)
-        if canonical_count != target_count:
-            rows.append({"type": "Roster", "setting": slot, "canonical": canonical_count, "target": target_count})
-    canonical_team_count = canonical_config.get("team_count")
-    if canonical_team_count is not None and canonical_team_count != target.total_rosters:
-        rows.append({"type": "League Size", "setting": "Teams", "canonical": canonical_team_count, "target": target.total_rosters})
-    return pd.DataFrame(rows)
 
 
 @st.cache_data(show_spinner=False)
@@ -143,23 +74,6 @@ def cached_run_public_analysis(target_league_id: str) -> dict[str, Any]:
 @st.cache_data(show_spinner=False)
 def cached_build_candidate_model(canonical_leagues_json: str) -> dict[str, Any]:
     return build_candidate_model(
-        client=SleeperClient(),
-        canonical_leagues=json.loads(canonical_leagues_json),
-        today=TODAY,
-    )
-
-
-@st.cache_data(show_spinner=False)
-def cached_validate_historical_donors(canonical_leagues_json: str) -> dict[str, Any]:
-    return validate_historical_donor_configuration(
-        client=SleeperClient(),
-        canonical_leagues=json.loads(canonical_leagues_json),
-        today=TODAY,
-    )
-
-
-def validate_historical_donors_live(canonical_leagues_json: str) -> dict[str, Any]:
-    return validate_historical_donor_configuration(
         client=SleeperClient(),
         canonical_leagues=json.loads(canonical_leagues_json),
         today=TODAY,
@@ -189,37 +103,6 @@ def cached_canonical_adp_status(canonical_leagues_json: str) -> dict[str, Any]:
     return load_canonical_adp_status(canonical_leagues_json, force_refresh=False)
 
 
-def render_hero() -> None:
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-    st.markdown(
-        """
-        <section class="hero">
-            <h1>League-Specific ADP</h1>
-            <p>
-                Start from the closest real canonical ADP market, preserve what the market already knows about
-                each player, and adjust only for how your Sleeper league changes positional production and scarcity.
-            </p>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_setting_cards(league: LeagueSettings) -> None:
-    settings = important_league_settings(league)
-    columns = st.columns(4)
-    for index, (label, value) in enumerate(settings.items()):
-        columns[index % 4].markdown(
-            f"""
-            <div class="summary-card">
-                <div class="summary-label">{label}</div>
-                <div class="summary-value">{value}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
 def format_timestamp(value: str | None) -> str:
     if not value:
         return "N/A"
@@ -236,200 +119,227 @@ def ensure_widget_choice(key: str, options: list[str], default: str | None = Non
     return str(st.session_state[key])
 
 
-def render_public_results(analysis: dict[str, Any]) -> None:
-    results = analysis["results"].copy()
-    target_environment = analysis["target_environment"]
-    artifacts = analysis["artifacts"]
-    adp_source_metadata = analysis.get("adp_source_metadata", {})
-    selected_key = analysis["selected_canonical_key"]
-    selected_label = analysis["selected_canonical_label"]
-    requested_label = analysis.get("requested_canonical_label", selected_label)
-    fallback_used = bool(analysis.get("selected_canonical_fallback"))
-    canonical_config = artifacts.metadata.get("canonical_environments", {}).get(selected_key, {})
-    target_league = target_environment["league"]
+def public_error_message(exc: Exception) -> str:
+    message = str(exc)
+    lowered = message.lower()
+    if isinstance(exc, SleeperAPIError) or "sleeper" in lowered:
+        return "We couldn't load that Sleeper league. Check the league ID and try again."
+    if "position history library" in lowered or "historical scoring environment" in lowered:
+        return "Historical scoring data is not available for this league configuration yet."
+    if "canonical model artifacts" in lowered or "production canonical model" in lowered:
+        return "The saved production model is not ready yet. Rebuild and promote it from the Development page."
+    return message
 
-    st.subheader("League Settings")
-    render_setting_cards(target_league)
-    st.caption(f"Selected canonical anchor: {selected_label}")
-    if fallback_used:
-        st.info(
-            f"Closest exact market was {requested_label}, so the app anchored from {selected_label} because that is the nearest saved Superflex market available."
-        )
 
-    differences = canonical_difference_frame(target_league, canonical_config)
-    if not differences.empty:
-        st.markdown("**How This League Differs From Its Canonical Anchor**")
-        st.dataframe(differences, use_container_width=True, hide_index=True)
+def public_number_column(label: str, width: str = "small") -> st.column_config.NumberColumn:
+    return st.column_config.NumberColumn(label, format="%.1f", width=width)
 
-    metrics = st.columns(4)
-    metrics[0].metric("Players Modeled", len(results))
-    metrics[1].metric("Canonical Anchor", selected_label)
-    metrics[2].metric("Production Model", artifacts.metadata["selected_model_name"])
-    metrics[3].metric(
-        "Canonical ADP Snapshot",
-        format_timestamp(adp_source_metadata.get("retrieved_at") or adp_source_metadata.get("recorded_at")),
+
+def render_public_header() -> None:
+    st.title("League-Specific ADP")
+    st.caption("Adjust current Sleeper ADP for your league's scoring, roster settings, and positional scarcity.")
+
+
+def render_league_summary(league, results: pd.DataFrame) -> None:
+    st.header("League Summary")
+    st.subheader(league.name)
+    summary_columns = st.columns(4)
+    summary_columns[0].metric("Teams", league.total_rosters)
+    summary_columns[1].metric("Format", league_format_label(league))
+    summary_columns[2].metric("Scoring", scoring_primary_label(league))
+    summary_columns[3].metric("Players Modeled", len(results))
+    st.caption(f"Starting lineup: {starting_lineup_text(league)}")
+    details = scoring_detail_lines(league)
+    if details:
+        st.caption("Scoring details: " + " | ".join(details))
+
+
+def render_public_rankings(results: pd.DataFrame, positions: list[str], league_id: str) -> pd.DataFrame:
+    st.header("Scoring-Adjusted ADP")
+    filter_columns = st.columns([1, 2])
+    selected_positions = filter_columns[0].multiselect(
+        "Position",
+        options=positions,
+        default=positions,
+        key="public_positions",
     )
-
-    match_summary = target_environment.get("position_match_summary", pd.DataFrame())
-    if not match_summary.empty:
-        st.subheader("Historical Scoring References")
-        summary_view = match_summary[["position", "match_quality", "status", "distance", "max_reliable_rank"]].rename(
-            columns={
-                "position": "Position",
-                "match_quality": "Quality",
-                "status": "Coverage",
-                "distance": "Distance",
-                "max_reliable_rank": "Reliable Rank",
-            }
-        )
-        st.dataframe(summary_view, use_container_width=True, hide_index=True)
-        with st.expander("Position Match Details"):
-            for row in match_summary.to_dict(orient="records"):
-                st.markdown(f"**{row['position']}**")
-                st.write(
-                    {
-                        "quality": row["match_quality"],
-                        "coverage": row["status"],
-                        "distance": row["distance"],
-                        "target_scoring": row["target_scoring"],
-                        "matched_scoring": row["matched_scoring"],
-                    }
-                )
-                if row.get("differing_fields"):
-                    st.dataframe(pd.DataFrame(row["differing_fields"]), use_container_width=True, hide_index=True)
-
-    st.subheader("Adjusted Rankings")
-    search = st.text_input(
-        "Search players",
-        placeholder="Filter by player name or position",
+    active_positions = selected_positions or positions
+    search = filter_columns[1].text_input(
+        "Search player",
+        placeholder="Search by player, team, or position",
         key="public_player_search",
     )
-    filtered = results.copy()
-    if search:
-        needle = search.lower()
-        filtered = filtered[
-            filtered["player_name"].str.lower().str.contains(needle)
-            | filtered["position"].str.lower().str.contains(needle)
-        ]
 
-    display_columns = [
-        "adjusted_rank",
-        "player_name",
-        "position",
-        "adp",
-        "pos_rank",
-        "league_adjusted_adp",
-        "adp_change",
-        "canonical_expected_ppg",
-        "league_expected_ppg",
-        "canonical_vorp",
-        "league_vorp",
-        "delta_metric",
-        "short_explanation",
-    ]
-    rename_columns = {
-        "adjusted_rank": "Adjusted Rank",
-        "player_name": "Player",
-        "position": "Position",
-        "adp": "Current Canonical ADP",
-        "pos_rank": "Current Positional Rank",
-        "league_adjusted_adp": "League-Adjusted ADP",
-        "adp_change": "ADP Change",
-        "canonical_expected_ppg": "Canonical Expected PPG",
-        "league_expected_ppg": "League Expected PPG",
-        "canonical_vorp": "Canonical VORP",
-        "league_vorp": "League VORP",
-        "delta_metric": "Delta Metric",
-        "short_explanation": "Short Explanation",
-    }
-    columns_to_show = [column for column in display_columns if column in filtered.columns]
-    st.dataframe(filtered[columns_to_show].rename(columns=rename_columns), use_container_width=True, hide_index=True)
+    public_rankings = build_public_rankings_frame(results, positions=active_positions, search=search)
+    st.caption("Positive change means draft earlier than current Sleeper market ADP.")
+    st.dataframe(
+        public_rankings,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Rank": st.column_config.NumberColumn("Rank", format="%d", width="small"),
+            "Pos Rank": st.column_config.NumberColumn("Pos Rank", format="%d", width="small"),
+            "Market ADP": public_number_column("Market ADP"),
+            "League ADP": public_number_column("League ADP"),
+            "Change": public_number_column("Change"),
+        },
+    )
+    download_frame = build_public_download_frame(results[results["position"].isin(positions)].copy())
     st.download_button(
-        "Download CSV",
-        data=results.to_csv(index=False).encode("utf-8"),
-        file_name=f"league_adjusted_adp_{target_league.league_id}.csv",
+        "Download League ADP",
+        data=download_frame.to_csv(index=False).encode("utf-8"),
+        file_name=f"league_adjusted_adp_{league_id}.csv",
         mime="text/csv",
         key="public_download_csv",
     )
+    return active_positions
 
-    st.subheader("Player Explanation")
-    player_options = results["player_name"].tolist()
-    ensure_widget_choice("public_selected_player_name", player_options, player_options[0] if player_options else None)
-    selected_player_name = st.selectbox(
-        "Select a player",
-        options=player_options,
-        key="public_selected_player_name",
-    )
-    selected_player = results.loc[results["player_name"] == selected_player_name].iloc[0]
-    st.markdown(
-        f"""
-        **{selected_player['player_name']}**
 
-        Canonical ADP Environment: `{selected_label}`  
-        Current ADP: `{selected_player['adp']:.1f}`  
-        League ADP: `{selected_player['league_adjusted_adp']:.1f}`  
-        Adjusted Movement: `{selected_player['adp_change']:+.1f}` picks  
-        Current Positional Rank: `{selected_player['position']}{int(selected_player['pos_rank'])}`  
-        Canonical Expected PPG: `{selected_player.get('canonical_expected_ppg', float('nan')):.2f}`  
-        League Expected PPG: `{selected_player.get('league_expected_ppg', float('nan')):.2f}`  
-        Canonical VORP: `{selected_player.get('canonical_vorp', float('nan')):.2f}`  
-        League VORP: `{selected_player.get('league_vorp', float('nan')):.2f}`  
-        Delta Metric: `{selected_player['delta_metric']:+.2f}`
-
-        {selected_player['short_explanation']}
-        """
-    )
-
-    st.subheader("Visuals")
-    position_filter_options = ["ALL", "QB", "RB", "WR", "TE"]
-    default_position_filter = ensure_widget_choice("public_position_filter", position_filter_options, "ALL")
-    position_filter = st.segmented_control(
-        "Position Filter",
-        options=position_filter_options,
-        default=default_position_filter,
-        key="public_position_filter",
-    )
-    position_filter = position_filter or default_position_filter or "ALL"
+def render_biggest_movers(results: pd.DataFrame, positions: list[str]) -> None:
+    filtered = results[results["position"].isin(positions)].copy()
+    st.header("Biggest Risers and Fallers")
     left, right = st.columns(2)
-    left.plotly_chart(build_adp_movement_chart(results, position_filter=position_filter), use_container_width=True)
-    right.plotly_chart(build_current_vs_adjusted_scatter(results), use_container_width=True)
+    left.subheader("Biggest Risers")
+    left.dataframe(
+        build_biggest_risers_frame(filtered),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Market ADP": public_number_column("Market ADP"),
+            "League ADP": public_number_column("League ADP"),
+            "Change": public_number_column("Change"),
+        },
+    )
+    right.subheader("Biggest Fallers")
+    right.dataframe(
+        build_biggest_fallers_frame(filtered),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Market ADP": public_number_column("Market ADP"),
+            "League ADP": public_number_column("League ADP"),
+            "Change": public_number_column("Change"),
+        },
+    )
 
-    impact_summary = (
-        results.groupby("position", as_index=False)
-        .agg(
-            baseline_metric=("canonical_metric", "mean"),
-            target_metric=("league_metric", "mean"),
-            mean_adp_change=("adp_change", "mean"),
+
+def render_position_context(
+    analysis: dict[str, Any],
+    results: pd.DataFrame,
+    positions: list[str],
+) -> None:
+    target_environment = analysis["target_environment"]
+    match_summary = target_environment.get("position_match_summary", pd.DataFrame())
+    st.header("League Impact")
+    left, right = st.columns(2)
+    left.subheader("Position Impact")
+    left.dataframe(
+        build_position_impact_frame(results, positions),
+        use_container_width=True,
+        hide_index=True,
+        column_config={"Avg Change": public_number_column("Avg Change")},
+    )
+    right.subheader("Historical References")
+    right.dataframe(
+        build_historical_reference_frame(match_summary, positions),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    match_details = build_historical_match_details(match_summary, positions)
+    if match_details:
+        with st.expander("Historical scoring match details"):
+            for detail in match_details:
+                st.markdown(f"**{detail['position']} historical reference: {detail['match_quality']}**")
+                for line in detail["differences"]:
+                    st.write(f"- {line}")
+
+
+def render_player_detail(
+    analysis: dict[str, Any],
+    results: pd.DataFrame,
+    positions: list[str],
+) -> None:
+    target_environment = analysis["target_environment"]
+    match_summary = target_environment.get("position_match_summary", pd.DataFrame())
+    options_frame = results[results["position"].isin(positions)].sort_values(["adjusted_rank", "player_name"])
+    player_options = options_frame["player_name"].tolist()
+    if not player_options:
+        return
+
+    st.header("Player Detail")
+    ensure_widget_choice("public_selected_player_name", player_options, player_options[0])
+    selected_player_name = st.selectbox("Select player", options=player_options, key="public_selected_player_name")
+    selected_player = options_frame.loc[options_frame["player_name"] == selected_player_name].iloc[0]
+
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Market ADP", f"{float(selected_player['adp']):.1f}")
+    metric_columns[1].metric("League ADP", f"{float(selected_player['league_adjusted_adp']):.1f}")
+    metric_columns[2].metric("Change", f"{float(selected_player['adp_change']):+.1f}")
+    metric_columns[3].metric("Pos Rank", f"{selected_player['position']}{int(selected_player['pos_rank'])}")
+    st.write(public_player_explanation(selected_player))
+
+    player_match = match_summary[match_summary["position"] == selected_player["position"]]
+    if not player_match.empty:
+        match_row = player_match.iloc[0]
+        st.caption(f"{selected_player['position']} historical reference: {match_row['match_quality']}")
+
+    with st.expander("Why did this player move?"):
+        st.dataframe(
+            build_player_advanced_frame(selected_player),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Canonical": st.column_config.NumberColumn("Canonical", format="%.2f"),
+                "League": st.column_config.NumberColumn("League", format="%.2f"),
+            },
         )
-    )
-    impact_summary["impact_pct"] = impact_summary.apply(
-        lambda row: ((row["target_metric"] - row["baseline_metric"]) / abs(row["baseline_metric"]) * 100.0)
-        if abs(row["baseline_metric"]) > 1e-6
-        else 0.0,
-        axis=1,
-    )
-    st.plotly_chart(build_positional_impact_chart(impact_summary), use_container_width=True)
 
-    curve_position_options = ["QB", "RB", "WR", "TE"]
-    ensure_widget_choice("public_curve_position", curve_position_options, "QB")
-    curve_position = st.selectbox(
-        "Curve Position",
-        options=curve_position_options,
-        key="public_curve_position",
-    )
-    source_curves = artifacts.curves[(artifacts.curves["environment_key"] == selected_key) & (artifacts.curves["dataset"] == "fitted")]
-    source_empirical = artifacts.curves[(artifacts.curves["environment_key"] == selected_key) & (artifacts.curves["dataset"] == "empirical")]
+
+def render_curve_context(analysis: dict[str, Any], results: pd.DataFrame, positions: list[str]) -> None:
+    if not positions:
+        return
+    artifacts = analysis["artifacts"]
+    target_environment = analysis["target_environment"]
+    selected_key = analysis["selected_canonical_key"]
+    selected_replacement_method = artifacts.metadata["selected_replacement_method"]
+
+    st.header("Position-Level Context")
+    ensure_widget_choice("public_curve_position", positions, positions[0])
+    curve_position = st.selectbox("Position", options=positions, key="public_curve_position")
+
+    source_curves = artifacts.curves[
+        (artifacts.curves["environment_key"] == selected_key)
+        & (artifacts.curves["dataset"] == "fitted")
+        & (artifacts.curves["position"] == curve_position)
+    ]
+    source_empirical = artifacts.curves[
+        (artifacts.curves["environment_key"] == selected_key)
+        & (artifacts.curves["dataset"] == "empirical")
+        & (artifacts.curves["position"] == curve_position)
+    ]
+    target_curves = target_environment["evaluated_curves"][
+        (target_environment["evaluated_curves"]["dataset"] == "fitted")
+        & (target_environment["evaluated_curves"]["position"] == curve_position)
+    ]
+    target_empirical = target_environment["evaluated_curves"][
+        (target_environment["evaluated_curves"]["dataset"] == "empirical")
+        & (target_environment["evaluated_curves"]["position"] == curve_position)
+    ]
     source_replacement = artifacts.replacement[
         (artifacts.replacement["environment_key"] == selected_key)
-        & (artifacts.replacement["replacement_method"] == artifacts.metadata["selected_replacement_method"])
+        & (artifacts.replacement["replacement_method"] == selected_replacement_method)
     ].set_index("position")
-    target_replacement = target_environment["replacement_variants"][artifacts.metadata["selected_replacement_method"]].set_index("position")
+    target_replacement = target_environment["replacement_variants"][selected_replacement_method].set_index("position")
+    if curve_position not in source_replacement.index or curve_position not in target_replacement.index:
+        return
+
     st.plotly_chart(
         build_curve_chart(
             baseline_curve=source_curves,
-            target_curve=target_environment["evaluated_curves"][target_environment["evaluated_curves"]["dataset"] == "fitted"],
+            target_curve=target_curves,
             empirical_baseline=source_empirical,
-            empirical_target=target_environment["evaluated_curves"][target_environment["evaluated_curves"]["dataset"] == "empirical"],
+            empirical_target=target_empirical,
             replacement_baseline_rank=int(source_replacement.loc[curve_position, "replacement_rank"]),
             replacement_target_rank=int(target_replacement.loc[curve_position, "replacement_rank"]),
             position=curve_position,
@@ -437,62 +347,63 @@ def render_public_results(analysis: dict[str, Any]) -> None:
         use_container_width=True,
     )
 
-    with st.expander("Advanced / Methodology"):
-        st.write(
-            {
-                "selected_canonical_key": selected_key,
-                "selected_canonical_label": selected_label,
-                "requested_canonical_label": requested_label,
-                "fallback_used": fallback_used,
-                "selected_model_name": artifacts.metadata["selected_model_name"],
-                "selected_metric_mode": artifacts.metadata["selected_metric_mode"],
-                "selected_replacement_method": artifacts.metadata["selected_replacement_method"],
-                "selected_utility_transform": artifacts.metadata["selected_utility_transform"],
-                "selected_weight_power": artifacts.metadata["selected_weight_power"],
-                "canonical_adp_source": adp_source_metadata.get("source", "BeatADP Sleeper ADP"),
-                "canonical_adp_status": adp_source_metadata.get("status"),
-                "canonical_adp_recorded_at": adp_source_metadata.get("recorded_at"),
-                "canonical_adp_retrieved_at": adp_source_metadata.get("retrieved_at"),
-            }
+
+def render_public_methodology(analysis: dict[str, Any]) -> None:
+    adp_source_metadata = analysis.get("adp_source_metadata", {})
+    with st.expander("How this works"):
+        for line in public_methodology_lines():
+            st.write(f"- {line}")
+        st.caption(
+            "Saved market snapshot: "
+            + format_timestamp(adp_source_metadata.get("retrieved_at") or adp_source_metadata.get("recorded_at"))
         )
-        st.caption("Public runtime reads the saved BeatADP Sleeper canonical snapshot from disk and does not scrape BeatADP live.")
-        if target_environment.get("public_runtime_mode") in {"no_history", "no_history_scoring_interpolated"}:
-            st.info(
-                "This public analysis used the canonical anchor's saved production curves and recalculated replacement levels from your league's current roster settings because usable Sleeper league history was unavailable."
-            )
-            fallback_reason = target_environment.get("fallback_reason")
-            if fallback_reason:
-                st.caption(f"Fallback reason: {fallback_reason}")
-        else:
-            coverage_rows = target_environment.get("coverage_frame", pd.DataFrame())
-            st.markdown("**Historical Sleeper Coverage**")
-            st.dataframe(pd.DataFrame(coverage_rows), use_container_width=True, hide_index=True)
-            st.markdown("**Target Curve Fits**")
-            st.dataframe(target_environment["candidate_curves"], use_container_width=True, hide_index=True)
-        st.markdown("**Target Replacement Levels**")
-        st.dataframe(target_environment["replacement_variants"][artifacts.metadata["selected_replacement_method"]], use_container_width=True, hide_index=True)
+
+
+def render_public_results(analysis: dict[str, Any]) -> None:
+    results = analysis["results"].copy()
+    target_league = analysis["target_environment"]["league"]
+    positions = modeled_positions_for_league(target_league, results)
+    unsupported_positions = unsupported_roster_positions(target_league)
+    unavailable_positions = missing_modeled_positions(target_league, results)
+
+    render_league_summary(target_league, results)
+    if unsupported_positions:
+        st.warning(
+            "This version adjusts QB, RB, WR, and TE only. "
+            + ", ".join(unsupported_positions)
+            + " are not currently modeled."
+        )
+    if unavailable_positions:
+        st.warning(
+            "No adjusted results were produced for: " + ", ".join(unavailable_positions) + "."
+        )
+
+    active_positions = render_public_rankings(results, positions, target_league.league_id)
+    filtered_results = filter_results_for_display(results, positions=active_positions)
+    if not filtered_results.empty:
+        st.plotly_chart(
+            build_adp_movement_chart(
+                filtered_results,
+                position_filter=active_positions[0] if len(active_positions) == 1 else "ALL",
+            ),
+            use_container_width=True,
+        )
+    render_biggest_movers(results, active_positions)
+    render_position_context(analysis, results, active_positions)
+    render_player_detail(analysis, results, active_positions)
+    render_curve_context(analysis, results, active_positions)
+    render_public_methodology(analysis)
 
 
 def render_public_page() -> None:
-    render_hero()
+    render_public_header()
     try:
-        production_artifacts = CanonicalArtifactManager.production().load()
+        CanonicalArtifactManager.production().load()
     except ConfigError as exc:
-        st.error(str(exc))
-        st.info(
-            "Configure the canonical Sleeper league IDs in `src/config.py`, refresh BeatADP canonical ADPs from the "
-            "Development page, build a candidate model, and promote it to production."
-        )
+        st.error(public_error_message(exc))
+        st.info("Build and promote a production model from the Development page before analyzing leagues.")
         return
 
-    st.caption(f"Model version {APP_VERSION} | Production canonical model loaded from disk")
-    st.write(
-        {
-            "production_model": production_artifacts.metadata["selected_model_name"],
-            "selected_metric_mode": production_artifacts.metadata["selected_metric_mode"],
-            "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
-        }
-    )
     analyzed_league_id = st.session_state.get("public_analysis_league_id")
     league_id = st.text_input("Sleeper League ID", placeholder="Enter your Sleeper league ID", key="public_league_id")
     analysis = None
@@ -500,49 +411,46 @@ def render_public_page() -> None:
         if not league_id.strip():
             st.warning("Enter a Sleeper league ID to analyze.")
         else:
-            with st.spinner("Selecting the closest canonical anchor, applying current league settings, and transforming ADP..."):
+            with st.spinner("Analyzing league..."):
                 try:
                     analysis = cached_run_public_analysis(league_id.strip())
                 except LSADPError as exc:
-                    st.error(str(exc))
-                except Exception as exc:  # noqa: BLE001
-                    st.error(f"Unexpected failure while analyzing the league: {exc}")
+                    st.error(public_error_message(exc))
+                except Exception:  # noqa: BLE001
+                    st.error("The app ran into an unexpected problem while analyzing this league.")
                 else:
                     st.session_state["public_analysis_league_id"] = league_id.strip()
                     analyzed_league_id = league_id.strip()
                     st.session_state["public_player_search"] = ""
                     if analysis is not None and not analysis["results"].empty:
                         st.session_state["public_selected_player_name"] = str(analysis["results"].iloc[0]["player_name"])
-                    st.session_state["public_position_filter"] = "ALL"
-                    st.session_state["public_curve_position"] = "QB"
     elif analyzed_league_id:
         try:
             analysis = cached_run_public_analysis(analyzed_league_id)
         except LSADPError as exc:
-            st.error(str(exc))
+            st.error(public_error_message(exc))
             st.session_state.pop("public_analysis_league_id", None)
-            analyzed_league_id = None
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Unexpected failure while reloading the league analysis: {exc}")
+        except Exception:  # noqa: BLE001
+            st.error("The app ran into an unexpected problem while reloading the saved league analysis.")
             st.session_state.pop("public_analysis_league_id", None)
-            analyzed_league_id = None
-    if analysis is not None:
-        if analyzed_league_id:
-            st.caption(f"Showing loaded analysis for league `{analyzed_league_id}`.")
-        render_public_results(analysis)
-    else:
-        st.info("Enter a Sleeper league ID and the app will anchor from the nearest saved BeatADP Sleeper canonical market automatically.")
+
+    if analysis is None:
+        st.info("Enter a Sleeper league ID to build a league-specific draft board.")
+        return
+    render_public_results(analysis)
 
 
 def canonical_inputs() -> dict[str, str]:
     league_values: dict[str, str] = {}
-    st.markdown("## Canonical Configuration")
-    for environment_key in CANONICAL_ENVIRONMENTS:
-        league_values[environment_key] = st.text_input(
-            f"{CANONICAL_LABELS[environment_key]} League ID",
-            value=CANONICAL_LEAGUES.get(environment_key, ""),
-            key=f"league_{environment_key}",
-        )
+    st.subheader("Canonical League Configuration")
+    input_columns = st.columns(2)
+    for index, environment_key in enumerate(CANONICAL_ENVIRONMENTS):
+        with input_columns[index % 2]:
+            league_values[environment_key] = st.text_input(
+                f"{CANONICAL_LABELS[environment_key]} League ID",
+                value=CANONICAL_LEAGUES.get(environment_key, ""),
+                key=f"league_{environment_key}",
+            )
     return league_values
 
 
@@ -574,8 +482,7 @@ def player_market_lookup(status_bundle: dict[str, Any], player_name: str) -> pd.
 
 
 def render_beatadp_section(canonical_leagues_json: str) -> None:
-    st.markdown("## BeatADP Canonical ADP")
-
+    st.subheader("Canonical ADP")
     status_bundle = st.session_state.get("beatadp_status")
     if status_bundle is None:
         try:
@@ -587,9 +494,8 @@ def render_beatadp_section(canonical_leagues_json: str) -> None:
             st.error(f"Unexpected BeatADP status failure: {exc}")
             return
 
-    refresh_col, info_col = st.columns([1, 2])
-    if refresh_col.button("Refresh BeatADP Canonical ADPs", use_container_width=True):
-        with st.spinner("Fetching BeatADP, matching players, validating canonical markets, and saving ADP snapshots..."):
+    if st.button("Refresh BeatADP Canonical ADPs", use_container_width=True):
+        with st.spinner("Refreshing canonical ADP..."):
             try:
                 status_bundle = load_canonical_adp_status(canonical_leagues_json, force_refresh=True)
                 st.session_state["beatadp_status"] = status_bundle
@@ -605,122 +511,77 @@ def render_beatadp_section(canonical_leagues_json: str) -> None:
 
     format_entries = list(status_bundle["formats"].values())
     total_players = sum(int(entry.get("player_count") or 0) for entry in format_entries)
-    info_col.write(
-        {
-            "provider": status_bundle["source"],
-            "status": status_bundle["status"],
-            "last_refresh": format_timestamp(status_bundle.get("last_refresh")),
-            "available_environments": status_bundle.get("available_environments"),
-            "missing_environments": status_bundle.get("missing_environments"),
-            "players_loaded": total_players,
-        }
-    )
-    info_col.caption("The Development page is the only place that fetches BeatADP live. The public app reads these saved files only.")
-
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Provider", status_bundle["source"])
+    metric_columns[1].metric("Status", status_bundle["status"])
+    metric_columns[2].metric("Last Refresh", format_timestamp(status_bundle.get("last_refresh")))
+    metric_columns[3].metric("Players Loaded", total_players)
+    st.caption("The Development page fetches BeatADP live. The public page reads the saved files only.")
     st.dataframe(canonical_adp_status_rows(status_bundle), use_container_width=True, hide_index=True)
 
-    st.markdown("### Distinctness Check")
-    if status_bundle["market_distinctness"].empty:
-        st.info("Distinctness requires at least two saved canonical markets.")
-    else:
-        st.dataframe(status_bundle["market_distinctness"], use_container_width=True, hide_index=True)
-
-    st.markdown("### Availability")
-    for environment_key in CANONICAL_ENVIRONMENTS:
-        label = CANONICAL_LABELS[environment_key]
-        available = environment_key in status_bundle.get("available_environments", [])
-        st.write(f"{label}: {'available' if available else 'unavailable'}")
+    with st.expander("Market Distinctness"):
+        if status_bundle["market_distinctness"].empty:
+            st.info("Distinctness requires at least two saved canonical markets.")
+        else:
+            st.dataframe(status_bundle["market_distinctness"], use_container_width=True, hide_index=True)
 
     all_players = sorted({player_name for frame in status_bundle["frames"].values() for player_name in frame["player_name"].tolist()})
     if all_players:
-        selected_player = st.selectbox("Inspect BeatADP player across saved markets", all_players, key="adp_player_lookup")
-        st.dataframe(player_market_lookup(status_bundle, selected_player), use_container_width=True, hide_index=True)
-        first_environment_key = next(iter(status_bundle["frames"]))
-        st.markdown("### First 20 Rows")
+        selected_player = st.selectbox("Inspect saved market ADP for a player", all_players, key="adp_player_lookup")
         st.dataframe(
-            status_bundle["frames"][first_environment_key][["player_name", "position", "team", "adp", "pos_rank"]].head(20),
+            player_market_lookup(status_bundle, selected_player),
             use_container_width=True,
             hide_index=True,
+            column_config={"ADP": public_number_column("ADP")},
         )
 
 
-def render_donor_validation_section(canonical_leagues_json: str) -> None:
-    st.markdown("## Historical Donor Leagues")
-    st.caption(f"Source: `{HISTORICAL_DONOR_FILE.relative_to(HISTORICAL_DONOR_FILE.parent.parent.parent)}`")
+def render_seed_league_section() -> None:
+    st.subheader("Historical Library Seeds")
+    st.caption(f"Source file: `{HISTORICAL_DONOR_FILE.name}`")
 
-    validate_col, reload_col = st.columns(2)
-    if validate_col.button("Load / Validate Donor Leagues", type="primary", use_container_width=True):
-        with st.spinner("Loading the curated donor config, validating each donor against Sleeper, and measuring historical coverage..."):
-            try:
-                bundle = validate_historical_donors_live(canonical_leagues_json)
-                st.session_state["validated_donors"] = bundle
-                cached_validate_historical_donors.clear()
-                cached_build_candidate_model.clear()
-            except LSADPError as exc:
-                st.error(str(exc))
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Unexpected donor validation failure: {exc}")
+    if st.button("Reload Seed League File", use_container_width=True):
+        st.session_state.pop("history_seed_bundle", None)
 
-    if reload_col.button("Reload Cached Validation", use_container_width=True):
+    seed_bundle = st.session_state.get("history_seed_bundle")
+    if seed_bundle is None:
         try:
-            bundle = cached_validate_historical_donors(canonical_leagues_json)
-            st.session_state["validated_donors"] = bundle
-            st.success("Historical donors reloaded from the configured source.")
+            seeds, metadata = load_history_seed_leagues(today=TODAY)
         except LSADPError as exc:
             st.error(str(exc))
+            return
         except Exception as exc:  # noqa: BLE001
-            st.error(f"Unexpected donor reload failure: {exc}")
+            st.error(f"Unexpected seed-league load failure: {exc}")
+            return
+        seed_bundle = {"seeds": seeds, "metadata": metadata}
+        st.session_state["history_seed_bundle"] = seed_bundle
 
-    validated = st.session_state.get("validated_donors")
-    if validated is None:
-        try:
-            validated = cached_validate_historical_donors(canonical_leagues_json)
-            st.session_state["validated_donors"] = validated
-        except ConfigError:
-            validated = None
-
-    if validated is None:
-        return
-
-    metadata = validated.get("source_metadata", {})
-    st.write(
-        {
-            "source": metadata.get("source"),
-            "required_seasons": validated.get("required_seasons"),
-            "active_rows": metadata.get("active_rows"),
-            "ignored_standard_rows": metadata.get("ignored_standard_rows"),
-            "ignored_out_of_window_rows": metadata.get("ignored_out_of_window_rows"),
-            "duplicate_rows_removed": metadata.get("duplicate_rows_removed"),
-        }
+    seeds = seed_bundle["seeds"]
+    metadata = seed_bundle["metadata"]
+    metric_columns = st.columns(3)
+    metric_columns[0].metric("Selected Rows", metadata["selected_rows"])
+    metric_columns[1].metric("Unique Leagues", metadata["unique_leagues"])
+    metric_columns[2].metric("Season Range", f"{metadata['season_range'][0]}-{metadata['season_range'][1]}")
+    summary = (
+        seeds.groupby("season", as_index=False)
+        .agg(seed_leagues=("league_id", "nunique"))
+        .sort_values("season")
+        .reset_index(drop=True)
     )
-
-    if validated.get("missing_cells"):
-        missing_text = ", ".join(f"{season} {scoring_format}" for season, scoring_format in validated["missing_cells"])
-        st.error(f"Required donor cells are still missing after Sleeper validation: {missing_text}")
-
-    st.markdown("### Donor Matrix")
-    st.dataframe(
-        donor_matrix_summary(validated["accepted"], validated["required_seasons"], required_donors_per_cell=1),
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.markdown("### Accepted Donors")
-    st.dataframe(validated["accepted"], use_container_width=True, hide_index=True)
-    if not validated["rejected"].empty:
-        st.markdown("### Rejected Donors")
-        st.dataframe(validated["rejected"], use_container_width=True, hide_index=True)
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+    with st.expander("Seed League Rows"):
+        st.dataframe(seeds.sort_values(["season", "league_id"]).reset_index(drop=True), use_container_width=True, hide_index=True)
 
 
 def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
     history_environments = bundle.get("history_position_environments", pd.DataFrame())
     history_seasons = bundle.get("history_environment_seasons", pd.DataFrame())
     selected_validation = bundle["selected_validation"].copy()
-    selected_validation["source_label"] = selected_validation["source_environment"].map(CANONICAL_LABELS)
-    selected_validation["target_label"] = selected_validation["target_environment"].map(CANONICAL_LABELS)
+    selected_validation["Source"] = selected_validation["source_environment"].map(CANONICAL_LABELS)
+    selected_validation["Target"] = selected_validation["target_environment"].map(CANONICAL_LABELS)
 
     if not history_environments.empty:
-        st.markdown("## Position History Library")
-        st.write(bundle.get("history_library_metadata", {}))
+        st.subheader("Position History Library")
         counts = (
             history_environments.groupby(["position", "status"], as_index=False)
             .size()
@@ -728,26 +589,18 @@ def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
             .fillna(0)
             .reset_index()
         )
-        st.dataframe(history_environments, use_container_width=True, hide_index=True)
-        if not counts.empty:
-            st.markdown("### Coverage Summary")
-            st.dataframe(counts, use_container_width=True, hide_index=True)
+        st.dataframe(counts, use_container_width=True, hide_index=True)
         if not history_seasons.empty:
-            st.markdown("### Seasonal Coverage")
-            st.dataframe(history_seasons, use_container_width=True, hide_index=True)
+            with st.expander("Seasonal Coverage"):
+                st.dataframe(history_seasons, use_container_width=True, hide_index=True)
 
-    st.markdown("## ADP Inputs")
-    st.write(bundle["adp_source_summary"])
-    st.dataframe(bundle["market_distinctness"], use_container_width=True, hide_index=True)
-
-    st.markdown("## Validation")
+    st.subheader("Validation")
     st.dataframe(selected_validation, use_container_width=True, hide_index=True)
     st.dataframe(bundle["validation_by_type"], use_container_width=True, hide_index=True)
     st.dataframe(bundle["leave_one_out"], use_container_width=True, hide_index=True)
 
     left, right = st.columns(2)
     left.plotly_chart(build_validation_heatmap(selected_validation), use_container_width=True)
-
     sample_pair = next(iter(bundle["predictions"]))
     sample_prediction = bundle["predictions"][sample_pair]
     sample_actual = bundle["source_adp_by_environment"][sample_pair[1]]
@@ -766,26 +619,58 @@ def render_candidate_diagnostics(bundle: dict[str, Any]) -> None:
     left.plotly_chart(build_error_by_bucket_chart(bucket_frame), use_container_width=True)
     right.dataframe(positional_errors, use_container_width=True, hide_index=True)
 
-    st.markdown("## Production Curves")
-    selected_position = st.selectbox("Canonical Curve Position", options=["QB", "RB", "WR", "TE"], key="canonical_curve_position")
+    st.subheader("Canonical Curves")
+    selected_position = st.selectbox("Canonical curve position", options=["QB", "RB", "WR", "TE"], key="canonical_curve_position")
     st.plotly_chart(build_environment_curve_chart(bundle["curves"], selected_position), use_container_width=True)
+
+
+def render_artifact_summary(title: str, artifacts) -> None:
+    st.subheader(title)
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Selected Model", artifacts.metadata["selected_model_name"])
+    metric_columns[1].metric("Replacement", artifacts.metadata["selected_replacement_method"])
+    metric_columns[2].metric("Score", f"{float(artifacts.metadata['selected_model_score']):.2f}")
+    metric_columns[3].metric("Environments", len(artifacts.metadata.get("available_canonical_environments", [])))
+    with st.expander(f"{title} model parameters"):
+        st.dataframe(artifacts.model_parameters, use_container_width=True, hide_index=True)
+
+
+def render_history_match_tester(candidate_bundle: dict[str, Any]) -> None:
+    st.subheader("History Match Tester")
+    inspect_league_id = st.text_input("Inspect Sleeper league ID", key="history_match_league_id")
+    if st.button("Inspect History Match", use_container_width=True):
+        if not inspect_league_id.strip():
+            st.warning("Enter a Sleeper league ID to inspect.")
+        else:
+            try:
+                league = SleeperClient().get_league(inspect_league_id.strip())
+                inspected = build_league_environment_from_library(
+                    league=league,
+                    library_bundle={
+                        "position_scoring_environments": candidate_bundle.get("history_position_environments", pd.DataFrame()),
+                        "environment_seasons": candidate_bundle.get("history_environment_seasons", pd.DataFrame()),
+                        "curve_models": candidate_bundle.get("history_curve_models", pd.DataFrame()),
+                        "fitted_curves": candidate_bundle.get("history_curves", pd.DataFrame()),
+                    },
+                    replacement_method="starter_demand",
+                )
+                st.dataframe(inspected["position_match_summary"], use_container_width=True, hide_index=True)
+            except LSADPError as exc:
+                st.error(str(exc))
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Unexpected history-match inspection failure: {exc}")
 
 
 def render_development_page() -> None:
     st.title("Development")
-    st.caption("Hidden model builder for donor-backed history, BeatADP Sleeper canonical ADPs, candidate comparison, and promotion.")
+    st.caption(f"Native Streamlit diagnostics for the production pipeline. Version {APP_VERSION}.")
 
     canonical_leagues = canonical_inputs()
     leagues_json = json.dumps(canonical_leagues, sort_keys=True)
 
-    render_beatadp_section(leagues_json)
-    render_donor_validation_section(leagues_json)
-
-    st.markdown("## Model Builder")
     build_col, validate_col, promote_col = st.columns(3)
-
     if build_col.button("Build Candidate Model", type="primary", use_container_width=True):
-        with st.spinner("Loading active canonical leagues, validating donor history, fitting curves, calibrating specs, and saving the candidate..."):
+        with st.spinner("Building candidate model..."):
             try:
                 bundle = cached_build_candidate_model(leagues_json)
                 save_candidate_model(CanonicalArtifactManager.candidate(), bundle)
@@ -795,10 +680,10 @@ def render_development_page() -> None:
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Unexpected candidate build failure: {exc}")
             else:
-                st.success("Candidate model saved under `data/baseline/candidate/`.")
+                st.success("Candidate model saved.")
 
-    if validate_col.button("Validate Candidate", use_container_width=True):
-        with st.spinner("Rebuilding the candidate diagnostics for inspection..."):
+    if validate_col.button("Refresh Candidate Diagnostics", use_container_width=True):
+        with st.spinner("Refreshing candidate diagnostics..."):
             try:
                 bundle = cached_build_candidate_model(leagues_json)
                 st.session_state["candidate_bundle"] = bundle
@@ -817,72 +702,29 @@ def render_development_page() -> None:
         else:
             st.success("Candidate promoted to production.")
 
-    st.markdown("## Candidate Model")
-    try:
-        candidate_artifacts = CanonicalArtifactManager.candidate().load()
-        st.write(
-            {
-                "selected_model_name": candidate_artifacts.metadata["selected_model_name"],
-                "selected_metric_mode": candidate_artifacts.metadata["selected_metric_mode"],
-                "selected_replacement_method": candidate_artifacts.metadata["selected_replacement_method"],
-                "selected_utility_transform": candidate_artifacts.metadata["selected_utility_transform"],
-                "selected_weight_power": candidate_artifacts.metadata["selected_weight_power"],
-                "selected_model_score": candidate_artifacts.metadata["selected_model_score"],
-                "available_canonical_environments": candidate_artifacts.metadata.get("available_canonical_environments"),
-            }
-        )
-        st.dataframe(candidate_artifacts.model_parameters, use_container_width=True, hide_index=True)
-    except ConfigError as exc:
-        st.info(str(exc))
-
-    st.markdown("## Production Model")
-    try:
-        production_artifacts = CanonicalArtifactManager.production().load()
-        st.write(
-            {
-                "selected_model_name": production_artifacts.metadata["selected_model_name"],
-                "selected_metric_mode": production_artifacts.metadata["selected_metric_mode"],
-                "selected_replacement_method": production_artifacts.metadata["selected_replacement_method"],
-                "selected_utility_transform": production_artifacts.metadata["selected_utility_transform"],
-                "selected_weight_power": production_artifacts.metadata["selected_weight_power"],
-                "selected_model_score": production_artifacts.metadata["selected_model_score"],
-                "available_canonical_environments": production_artifacts.metadata.get("available_canonical_environments"),
-            }
-        )
-    except ConfigError as exc:
-        st.info(str(exc))
-
-    candidate_bundle = st.session_state.get("candidate_bundle")
-    if candidate_bundle is not None:
-        st.markdown("## History Match Tester")
-        inspect_league_id = st.text_input("Inspect Sleeper league ID against the position history library", key="history_match_league_id")
-        if st.button("Inspect History Match", use_container_width=True):
-            if not inspect_league_id.strip():
-                st.warning("Enter a Sleeper league ID to inspect.")
-            else:
-                try:
-                    league = SleeperClient().get_league(inspect_league_id.strip())
-                    inspected = build_league_environment_from_library(
-                        league=league,
-                        library_bundle={
-                            "position_scoring_environments": candidate_bundle.get("history_position_environments", pd.DataFrame()),
-                            "environment_seasons": candidate_bundle.get("history_environment_seasons", pd.DataFrame()),
-                            "curve_models": candidate_bundle.get("history_curve_models", pd.DataFrame()),
-                            "fitted_curves": candidate_bundle.get("history_curves", pd.DataFrame()),
-                        },
-                        replacement_method="starter_demand",
-                    )
-                    st.dataframe(inspected["position_match_summary"], use_container_width=True, hide_index=True)
-                    if not inspected["position_match_summary"].empty:
-                        for row in inspected["position_match_summary"].to_dict(orient="records"):
-                            if row.get("differing_fields"):
-                                st.markdown(f"**{row['position']} scoring differences**")
-                                st.dataframe(pd.DataFrame(row["differing_fields"]), use_container_width=True, hide_index=True)
-                except LSADPError as exc:
-                    st.error(str(exc))
-                except Exception as exc:  # noqa: BLE001
-                    st.error(f"Unexpected history-match inspection failure: {exc}")
-        render_candidate_diagnostics(candidate_bundle)
+    tabs = st.tabs(["Canonical ADP", "Historical Library", "Diagnostics", "Artifacts"])
+    with tabs[0]:
+        render_beatadp_section(leagues_json)
+    with tabs[1]:
+        render_seed_league_section()
+        candidate_bundle = st.session_state.get("candidate_bundle")
+        if candidate_bundle is not None:
+            render_history_match_tester(candidate_bundle)
+    with tabs[2]:
+        candidate_bundle = st.session_state.get("candidate_bundle")
+        if candidate_bundle is None:
+            st.info("Build or refresh a candidate model to inspect diagnostics.")
+        else:
+            render_candidate_diagnostics(candidate_bundle)
+    with tabs[3]:
+        try:
+            render_artifact_summary("Candidate Artifacts", CanonicalArtifactManager.candidate().load())
+        except ConfigError as exc:
+            st.info(str(exc))
+        try:
+            render_artifact_summary("Production Artifacts", CanonicalArtifactManager.production().load())
+        except ConfigError as exc:
+            st.info(str(exc))
 
 
 def render_public_page_live() -> None:

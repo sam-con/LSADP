@@ -4,26 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SHOW_DEVELOPMENT_PAGE = False
+SHOW_DEVELOPMENT_PAGE = True
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 BASELINE_DIR = DATA_DIR / "baseline"
 PRODUCTION_MODEL_DIR = BASELINE_DIR / "production"
 CANDIDATE_MODEL_DIR = BASELINE_DIR / "candidate"
-OUTPUTS_DIR = BASE_DIR / "outputs" / "validation"
-ADP_CACHE_DIR = DATA_DIR / "adp_cache"
-ADP_CACHE_METADATA_FILE = ADP_CACHE_DIR / "metadata.json"
-HISTORICAL_DONOR_FILE = BASELINE_DIR / "historical_donors_by_year.json"
-HISTORICAL_DONOR_DISCOVERY_EXPORT_FILE = BASE_DIR / "donor_leagues.csv"
-HISTORICAL_DONOR_METADATA_FILE = BASELINE_DIR / "historical_donor_metadata.json"
+HISTORICAL_DONOR_FILE = BASE_DIR / "donor_leagues.csv"
 CANONICAL_ADP_METADATA_FILE = BASELINE_DIR / "adp_metadata.json"
-
-ADP_1QB_PATH = DATA_DIR / "adp_1qb.csv"
-ADP_SUPERFLEX_PATH = DATA_DIR / "adp_superflex.csv"
-
-BASELINE_1QB_LEAGUE_ID = ""
-BASELINE_SF_LEAGUE_ID = ""
 
 CANONICAL_ENVIRONMENTS = (
     "1qb_half_ppr",
@@ -68,19 +57,13 @@ CANONICAL_ADP_PATHS = {
 
 APP_VERSION = "0.1.0"
 REQUEST_TIMEOUT_SECONDS = 20
-ADP_CACHE_TTL_HOURS = 24
 BEATADP_PLATFORM_URL = "https://www.beatadp.com/platform-adp"
 BEATADP_SOURCE_NAME = "BeatADP Sleeper ADP"
 BEATADP_PARSER_VERSION = "beatadp-platform-adp-v1"
-FANTASYCALC_API_URL = "https://api.fantasycalc.com/values/current"
-FANTASYCALC_SOURCE_NAME = "FantasyCalc"
-FANTASYCALC_IS_DYNASTY = False
-FANTASYCALC_INCLUDE_ADP = True
 REGULAR_SEASON_WEEKS = tuple(range(1, 19))
 CORE_POSITIONS = ("QB", "RB", "WR", "TE")
 FLEX_POSITIONS = {"RB", "WR", "TE"}
 SUPERFLEX_POSITIONS = {"QB", "RB", "WR", "TE"}
-SCORING_FORMATS = ("half_ppr", "ppr")
 
 DEFAULT_MIN_GAMES = 4
 DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION = {
@@ -97,11 +80,6 @@ DEFAULT_MIN_PLAYERS_BY_POSITION = {
 }
 DEFAULT_COVERAGE_MIN_WEEKS = 10
 CURVE_SELECTION_RELATIVE_IMPROVEMENT = 0.02
-
-BASELINE_CURVES_FILE = BASELINE_DIR / "baseline_curves.csv"
-BASELINE_REPLACEMENT_FILE = BASELINE_DIR / "baseline_replacement.csv"
-BASELINE_MODEL_FILE = BASELINE_DIR / "baseline_model.csv"
-BASELINE_METADATA_FILE = BASELINE_DIR / "baseline_metadata.json"
 
 PRODUCTION_CURVES_FILE = PRODUCTION_MODEL_DIR / "canonical_curves.csv"
 PRODUCTION_REPLACEMENT_FILE = PRODUCTION_MODEL_DIR / "canonical_replacement.csv"

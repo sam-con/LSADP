@@ -10,17 +10,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.adp import ADPDataProvider, BeatADPProvider, FantasyCalcADPProvider, load_saved_canonical_adp_paths, match_players_by_identity
-from src.analysis import build_environment_from_player_weeks, default_modeling_config, load_league_environment
+from src.adp import ADPDataProvider, BeatADPProvider, load_saved_canonical_adp_paths, match_players_by_identity
 from src.baseline_artifacts import CanonicalArtifactManager
 from src.calibration import calibrate_market_values
 from src.canonical import (
     canonical_configuration,
     canonical_environment_key_for_league,
     classify_transformation_type,
-    detect_qb_format,
-    detect_reception_value,
-    detect_reception_format,
     directed_transform_pairs,
     ordered_canonical_environment_keys,
     validate_canonical_environment_keys,
@@ -31,13 +27,12 @@ from src.donors import (
     load_history_seed_leagues,
 )
 from src.history_library import build_league_environment_from_library, build_position_history_library
-from src.models import ConfigError, HistoricalDataError, HistoricalLeagueSummary, LeagueSettings, ModelingConfig
-from src.replacement import calculate_starter_demand_replacement
+from src.models import ConfigError, LeagueSettings, ModelingConfig, default_modeling_config
 from src.sleeper import SleeperClient
 from src.transform import apply_league_transformation
 from src.validation import positional_error_breakdown, score_prediction
 from src.vorp import build_vorp_table
-from src.utils import adp_utility, inverse_adp_utility, rank_players_within_position, required_completed_seasons
+from src.utils import adp_utility, inverse_adp_utility, rank_players_within_position
 
 UTC = timezone.utc
 
@@ -340,34 +335,6 @@ def synthesize_sf_ppr_from_square(
         "scarcity_path": scarcity_diagnostics,
     }
     return frames, metadata
-
-
-def build_canonical_environment_bundle(
-    client: SleeperClient,
-    canonical_leagues: dict[str, str] | None = None,
-    environment_keys: tuple[str, ...] | list[str] | None = None,
-    modeling_config: ModelingConfig | None = None,
-    today: date | None = None,
-) -> dict[str, dict[str, Any]]:
-    """Build historical environments for all canonical leagues."""
-
-    canonical_leagues = canonical_leagues or CANONICAL_LEAGUES
-    environment_keys = ordered_canonical_environment_keys(environment_keys or CANONICAL_ENVIRONMENTS)
-    validate_canonical_configuration(canonical_leagues, required_environment_keys=environment_keys)
-    modeling_config = modeling_config or default_modeling_config()
-
-    bundle: dict[str, dict[str, Any]] = {}
-    for environment_key in environment_keys:
-        environment = load_league_environment(
-            client=client,
-            league_id=canonical_leagues[environment_key],
-            modeling_config=modeling_config,
-            today=today,
-            replacement_method="starter_demand",
-        )
-        validate_environment_identity(environment_key, environment["league"])
-        bundle[environment_key] = environment
-    return bundle
 
 
 def load_canonical_league_settings_bundle(
@@ -938,148 +905,6 @@ def promote_candidate_model(
     production_manager.promote_from(candidate_manager)
 
 
-def build_public_target_environment_from_anchor(
-    *,
-    artifacts,
-    source_key: str,
-    target_league: LeagueSettings,
-) -> dict[str, Any]:
-    """Build a best-effort public target environment without requiring league history."""
-
-    fitted_curves, empirical_curves, runtime_mode = build_public_target_curve_bundle(
-        artifacts=artifacts,
-        source_key=source_key,
-        target_league=target_league,
-    )
-    if fitted_curves.empty:
-        raise ConfigError(f"Production curves are missing for canonical anchor {source_key}.")
-
-    fitted_curves = fitted_curves.drop(columns=["environment_key"], errors="ignore").reset_index(drop=True)
-    empirical_curves = empirical_curves.drop(columns=["environment_key"], errors="ignore").reset_index(drop=True)
-    if empirical_curves.empty:
-        empirical_curves = fitted_curves.copy()
-        empirical_curves["dataset"] = "empirical"
-
-    evaluated_curves = pd.concat([fitted_curves, empirical_curves], ignore_index=True)
-    starter_demand_replacement = calculate_starter_demand_replacement(target_league, fitted_curves)
-    fallback_historical_replacement = starter_demand_replacement.copy()
-    fallback_historical_replacement["method"] = "Starter Demand Replacement (No History Fallback)"
-
-    replacement_variants = {
-        "starter_demand": starter_demand_replacement,
-        "historical_roster": fallback_historical_replacement,
-    }
-    vorp_variants = {
-        name: build_vorp_table(fitted_curves, replacement_frame)
-        for name, replacement_frame in replacement_variants.items()
-    }
-    selected_replacement_method = str(artifacts.metadata.get("selected_replacement_method", "starter_demand"))
-    replacement = replacement_variants.get(selected_replacement_method, starter_demand_replacement)
-    vorp_table = vorp_variants.get(selected_replacement_method, vorp_variants["starter_demand"])
-
-    return {
-        "league": target_league,
-        "historical_leagues": [],
-        "coverage": [],
-        "player_weeks": pd.DataFrame(),
-        "season_player_ppg": pd.DataFrame(),
-        "empirical_curve": empirical_curves,
-        "candidate_curves": pd.DataFrame(),
-        "selected_curves": pd.DataFrame(),
-        "evaluated_curves": evaluated_curves,
-        "replacement_variants": replacement_variants,
-        "vorp_variants": vorp_variants,
-        "active_replacement_method": selected_replacement_method,
-        "replacement": replacement,
-        "vorp_table": vorp_table,
-        "historical_source": "canonical_anchor_fallback",
-        "public_runtime_mode": runtime_mode,
-        "position_match_summary": pd.DataFrame(),
-        "matched_position_environments": pd.DataFrame(),
-        "coverage_frame": pd.DataFrame(),
-    }
-
-
-def _curve_dataset_for_environment(artifacts, environment_key: str, dataset: str) -> pd.DataFrame:
-    return artifacts.curves[
-        (artifacts.curves["environment_key"] == environment_key) & (artifacts.curves["dataset"] == dataset)
-    ][["position", "rank", "expected_ppg", "dataset"]].copy()
-
-
-def _interpolate_curve_dataset(
-    lower_frame: pd.DataFrame,
-    upper_frame: pd.DataFrame,
-    *,
-    lower_value: float,
-    upper_value: float,
-    target_value: float,
-    dataset: str,
-) -> pd.DataFrame:
-    merged = lower_frame.merge(
-        upper_frame[["position", "rank", "expected_ppg"]].rename(columns={"expected_ppg": "upper_expected_ppg"}),
-        on=["position", "rank"],
-        how="inner",
-    )
-    if merged.empty:
-        return pd.DataFrame(columns=["position", "rank", "expected_ppg", "dataset"])
-    if abs(upper_value - lower_value) < 1e-9:
-        weight = 0.0
-    else:
-        weight = (target_value - lower_value) / (upper_value - lower_value)
-    merged["expected_ppg"] = merged["expected_ppg"] + weight * (merged["upper_expected_ppg"] - merged["expected_ppg"])
-    merged["dataset"] = dataset
-    return merged[["position", "rank", "expected_ppg", "dataset"]].sort_values(["position", "rank"]).reset_index(drop=True)
-
-
-def build_public_target_curve_bundle(
-    *,
-    artifacts,
-    source_key: str,
-    target_league: LeagueSettings,
-) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Build public target curves using canonical scoring interpolation when possible."""
-
-    qb_format = detect_qb_format(target_league)
-    target_reception = detect_reception_value(target_league)
-    if qb_format == "sf":
-        lower_key, upper_key = "sf_half_ppr", "sf_ppr"
-        lower_value, upper_value = 0.5, 1.0
-    else:
-        lower_key, upper_key = "1qb_half_ppr", "1qb_ppr"
-        lower_value, upper_value = 0.5, 1.0
-
-    available_curve_keys = set(artifacts.curves["environment_key"].astype(str).unique())
-    if lower_key in available_curve_keys and upper_key in available_curve_keys:
-        lower_fitted = _curve_dataset_for_environment(artifacts, lower_key, "fitted")
-        upper_fitted = _curve_dataset_for_environment(artifacts, upper_key, "fitted")
-        lower_empirical = _curve_dataset_for_environment(artifacts, lower_key, "empirical")
-        upper_empirical = _curve_dataset_for_environment(artifacts, upper_key, "empirical")
-        fitted_curves = _interpolate_curve_dataset(
-            lower_fitted,
-            upper_fitted,
-            lower_value=lower_value,
-            upper_value=upper_value,
-            target_value=target_reception,
-            dataset="fitted",
-        )
-        empirical_curves = _interpolate_curve_dataset(
-            lower_empirical,
-            upper_empirical,
-            lower_value=lower_value,
-            upper_value=upper_value,
-            target_value=target_reception,
-            dataset="empirical",
-        )
-        if not fitted_curves.empty:
-            return fitted_curves, empirical_curves, "no_history_scoring_interpolated"
-
-    return (
-        _curve_dataset_for_environment(artifacts, source_key, "fitted"),
-        _curve_dataset_for_environment(artifacts, source_key, "empirical"),
-        "no_history",
-    )
-
-
 def build_public_anchor_projection(
     source_key: str,
     target_environment: dict[str, Any],
@@ -1210,7 +1035,7 @@ def run_public_canonical_analysis(
     """Run the public user flow using the selected production canonical model."""
 
     artifacts = production_manager.load()
-    modeling_config = modeling_config or default_modeling_config()
+    _ = modeling_config
     selected_replacement_method = str(artifacts.metadata.get("selected_replacement_method", "starter_demand"))
     target_league = client.get_league(target_league_id)
     metadata_environment_keys = ordered_canonical_environment_keys(
@@ -1236,19 +1061,15 @@ def run_public_canonical_analysis(
         "curve_models": artifacts.history_curve_models,
         "fitted_curves": artifacts.history_curves,
     }
-    try:
-        target_environment = build_league_environment_from_library(
-            league=target_league,
-            library_bundle=history_library_bundle,
-            replacement_method=selected_replacement_method,
+    if artifacts.history_position_environments.empty or artifacts.history_curves.empty:
+        raise ConfigError(
+            "Production model artifacts do not include the position history library. Rebuild and promote the current candidate model."
         )
-    except ConfigError as exc:
-        target_environment = build_public_target_environment_from_anchor(
-            artifacts=artifacts,
-            source_key=anchor_key,
-            target_league=target_league,
-        )
-        target_environment["fallback_reason"] = str(exc)
+    target_environment = build_league_environment_from_library(
+        league=target_league,
+        library_bundle=history_library_bundle,
+        replacement_method=selected_replacement_method,
+    )
     results, source_adp_metadata = build_public_anchor_projection(
         source_key=anchor_key,
         target_environment=target_environment,

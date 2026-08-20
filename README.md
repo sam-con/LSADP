@@ -1,85 +1,57 @@
 # League-Specific ADP
 
-League-Specific ADP is a Streamlit app and research toolkit for turning a saved canonical ADP snapshot into a Sleeper league-specific draft board.
+League-Specific ADP is a Streamlit app and model-building toolkit for turning saved canonical BeatADP Sleeper markets into league-specific draft boards.
 
 ## Current Architecture
 
 ```text
-Historical side
-
-donor_leagues / historical_donors_by_year
+Seed leagues from donor_leagues.csv
         ->
-Sleeper historical players_points
+Position-specific Sleeper scoring history library
         ->
-Half-PPR / PPR production curves
-
-
-Market side
-
-BeatADP platform-adp
+Precomputed fitted positional curves
         ->
-Sleeper ADP column only
+Replacement levels and VORP
         ->
-Saved canonical ADP CSVs
-
-
-Model
-
-Historical production curves
-        +
-Canonical roster settings
+Saved BeatADP canonical Sleeper ADP markets
         ->
-Canonical VORP environments
+Calibrated market transformation
         ->
-Compare against saved BeatADP Sleeper ADPs
-        ->
-Select / validate transformation
-        ->
-Save production model
+League-specific ADP
 ```
+
+The public app does not rebuild league history on demand. It uses the saved production history library plus the saved canonical BeatADP snapshot.
 
 ## Canonical ADP Source
 
-Canonical ADP now comes from BeatADP's Sleeper platform ADP page:
+Canonical ADP comes from BeatADP's Sleeper platform ADP page:
 
 ```text
 https://www.beatadp.com/platform-adp
 ```
 
-Only BeatADP's Sleeper ADP values are used. The app does not substitute:
-
-- BeatADP consensus ADP
-- ESPN ADP
-- FantasyPros ADP
-- table rank
-- positional rank
-- FantasyCalc rankings
-
-FantasyCalc `overallRank` remains a diagnostic-only field in legacy code and is never treated as ADP.
+Only BeatADP's Sleeper ADP values are used. The runtime does not substitute consensus ranks or other third-party columns.
 
 ## Canonical Markets
 
-The system supports up to four canonical markets:
+The model supports these canonical environments:
 
 - `1qb_half_ppr`
 - `1qb_ppr`
 - `sf_half_ppr`
 - `sf_ppr`
 
-V1 calibration requires this minimum viable set:
+The minimum viable saved market set is:
 
 - `1qb_half_ppr`
 - `1qb_ppr`
 - `sf_half_ppr`
 
-If BeatADP does not expose `sf_ppr`, calibration still proceeds with those three markets. That yields:
+If BeatADP does not expose `sf_ppr`, the model synthesizes that corner from the other three saved markets during calibration/runtime loading.
 
-- 6 directed validations with 3 markets
-- 12 directed validations with 4 markets
+## Saved Files
 
-## Saved Canonical ADP Files
-
-BeatADP refresh writes canonical ADP snapshots to:
+Saved canonical ADP snapshots live under `data/baseline/`:
 
 ```text
 data/baseline/adp_1qb_half_ppr.csv
@@ -89,46 +61,26 @@ data/baseline/adp_sf_ppr.csv
 data/baseline/adp_metadata.json
 ```
 
-`adp_sf_ppr.csv` exists only when BeatADP exposes that market.
-
-The metadata file records:
-
-- source URL
-- fetch timestamp
-- available environments
-- missing environments
-- player counts
-- matching diagnostics
-- parser version
-- validation details
-
-The public app reads these saved files only. It does not scrape BeatADP live.
-
-## Public Runtime
-
-Normal runtime is:
+Candidate and production model artifacts live under:
 
 ```text
-Load production structural model
-        +
-Load saved BeatADP canonical ADP snapshot
-        +
-User enters Sleeper league ID
-        ->
-Choose nearest available canonical anchor
-        ->
-Load four completed Sleeper seasons
-        ->
-Recompute target production curves and scarcity
-        ->
-Transform canonical ADP into league-specific ADP
+data/baseline/candidate/
+data/baseline/production/
 ```
 
-If a public target league is Superflex PPR but `sf_ppr` is unavailable, the runtime falls back explicitly to `sf_half_ppr` rather than crossing to a 1QB anchor.
+Each promoted model is expected to include:
+
+- canonical fitted curves
+- replacement tables
+- market calibration outputs
+- validation summaries
+- position history library artifacts
+
+If the production history library artifacts are missing, the public app fails clearly and asks for a rebuild/promotion instead of falling back to legacy behavior.
 
 ## Development Workflow
 
-Enable the hidden Development page in `src/config.py`:
+Enable the hidden Development page in [src/config.py](/C:/Users/conle_tqane1n/Git/LSADP/src/config.py):
 
 ```python
 SHOW_DEVELOPMENT_PAGE = True
@@ -136,29 +88,18 @@ SHOW_DEVELOPMENT_PAGE = True
 
 From the Development page you can:
 
-- refresh BeatADP canonical ADPs
-- inspect available canonical markets
-- validate historical donor leagues
+- refresh saved BeatADP canonical ADPs
+- inspect canonical market distinctness
+- inspect the configured seed-league file
 - build a candidate model
-- validate the candidate
+- review candidate diagnostics
 - promote the candidate to production
 
-Candidate and production artifacts are saved under:
+The seed-league source file is:
 
 ```text
-data/baseline/candidate/
-data/baseline/production/
+donor_leagues.csv
 ```
-
-## Historical Data Constraints
-
-The historical side of the model is unchanged:
-
-- historical scoring comes from Sleeper `players_points`
-- the app uses the previous four completed NFL seasons
-- with the app date pinned to August 19, 2026, that window is `2022-2025`
-- scoring must remain consistent across that window
-- sparse or malformed history fails clearly
 
 ## Testing
 
@@ -168,20 +109,14 @@ Run the suite with:
 python -m pytest -q
 ```
 
-The suite is mocked and does not require live BeatADP or live Sleeper access.
+The tests are mocked and cover:
 
-Current coverage includes:
-
-- BeatADP parsing from saved HTML fixtures
-- rejection of missing Sleeper ADP values
-- no substitution from consensus or other columns
-- three-market and four-market calibration
-- dynamic validation counts
-- explicit Superflex fallback behavior
-- legacy guardrails that keep FantasyCalc rankings distinct from ADP
+- BeatADP parsing and persistence
+- canonical market loading and synthetic `sf_ppr`
+- position-history-library candidate builds
+- public runtime transformations from saved production artifacts
 
 ## Sources
 
 - BeatADP platform ADP page: https://www.beatadp.com/platform-adp
 - Sleeper API: https://docs.sleeper.com/
-- FantasyCalc homepage: https://fantasycalc.com/

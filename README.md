@@ -37,6 +37,8 @@ A live league response was also inspected before implementation. Its `scoring_se
 
 Sleeper scoring rules whose effect needs event-level distributions—notably yardage-threshold bonuses and other rules with no matching projected counting field—are **not guessed**. The app reports them in a warning and excludes them from the calculation.
 
+Sleeper can retain legacy ADP for inactive or retired players. V1 treats value above replacement as a floor at zero: a player below replacement—including a zero-projection legacy record—has no negative scarcity value that could turn into an artificial gain when a league changes its replacement benchmark. These records are retained and flagged in the table, but rank after every player with a usable projected point total; historical ADP cannot outweigh an absence of projected production.
+
 ## Reference league
 
 `src/models.py` defines the reference profiles and selects the closest market automatically:

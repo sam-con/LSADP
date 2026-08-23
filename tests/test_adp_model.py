@@ -59,3 +59,17 @@ def test_global_rerank_has_unique_coherent_adps():
     assert result.league_adjusted_rank.is_unique
     assert result.league_adjusted_adp.is_unique
     assert result.league_adjusted_adp.is_monotonic_increasing
+
+
+def test_zero_projection_players_have_zero_value_below_replacement_in_every_environment():
+    players = pd.concat(
+        [_players(), pd.DataFrame([{"player_id": "retired_qb", "player": "Retired QB", "team": "FA", "position": "QB", "current_adp": 2, "reference_points": 0, "league_points": 0}])],
+        ignore_index=True,
+    )
+    result, _ = _run(players, ("QB", "QB", "QB", "RB", "RB", "WR", "WR", "TE", "FLEX"))
+    retired = result.set_index("player_id").loc["retired_qb"]
+    assert retired.reference_value_above_replacement == 0
+    assert retired.league_value_above_replacement == 0
+    assert retired.scarcity_delta == 0
+    assert not retired.has_usable_projection
+    assert retired.league_adjusted_rank > result.loc[result.has_usable_projection, "league_adjusted_rank"].max()

@@ -51,7 +51,10 @@ def build_scarcity_frame(players: pd.DataFrame, points_column: str, roster_posit
         replacement_points = float(group.iloc[replacement_rank - 1][points_column])
         group["replacement_rank"] = replacement_rank
         group["replacement_points"] = replacement_points
-        group["value_above_replacement"] = group[points_column] - replacement_points
+        # A player below replacement has no negative draft value. Allowing negative
+        # values makes a change in the replacement benchmark look like a gain for
+        # a zero-projection player (for example, a retired QB with legacy ADP).
+        group["value_above_replacement"] = (group[points_column] - replacement_points).clip(lower=0.0)
         group["elite_separation"] = float(group.iloc[0][points_column]) - replacement_points
         group["replacement_separation"] = replacement_points - float(group.iloc[min(replacement_rank, len(group) - 1)][points_column])
         group["local_slope"] = group[points_column].diff(-1).abs().fillna(0.0)

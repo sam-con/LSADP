@@ -40,7 +40,15 @@ def estimate_adjusted_adp(players: pd.DataFrame, reference_scoring: str, league_
     result["current_adp_rank"] = market_rank.reindex(result.index).astype(int)
     # Log ADP expresses market spacing; normalized scarcity deltas are deliberately modest.
     result["draft_score"] = -np.log(result["current_adp"].clip(lower=0.01)) + adjustment_strength * result["normalized_scarcity_delta"]
-    result = result.sort_values(["draft_score", "current_adp", "player_id"], ascending=[False, True, True], kind="stable").copy()
+    # Retain legacy/unprojected records for transparency, but market ADP cannot
+    # outweigh an absence of projected production. This is a ranking tier, not a
+    # data filter: zero-point players remain on the board at zero marginal value.
+    result["has_usable_projection"] = (result[reference_scoring] > 0) | (result[league_scoring] > 0)
+    result = result.sort_values(
+        ["has_usable_projection", "draft_score", "current_adp", "player_id"],
+        ascending=[False, False, True, True],
+        kind="stable",
+    ).copy()
     result["league_adjusted_rank"] = np.arange(1, len(result) + 1)
     result["league_adjusted_adp"] = _strict_market_curve(players["current_adp"])
     result["adp_change"] = result["current_adp"] - result["league_adjusted_adp"]

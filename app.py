@@ -42,8 +42,8 @@ def _curve_chart(results: pd.DataFrame, position: str):
 def _movement_chart(results: pd.DataFrame):
     chart_data = results.copy()
     return alt.Chart(chart_data).mark_circle(size=55).encode(
-        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(reverse=True)),
-        y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(reverse=True)),
+        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(zero=True)),
+        y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(zero=True)),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
     ).properties(height=370, title="Market ADP vs league-adjusted ADP")
 
@@ -114,6 +114,9 @@ for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
 st.markdown("#### Player board")
 positions = st.multiselect("Positions", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"])
 view = results[results.position.isin(positions)].copy()
+# Calculate this in the presentation layer as well as the model layer so an
+# older cached result cannot make the table fail during a Cloud redeploy.
+view["has_usable_projection"] = (view["reference_points"] > 0) | (view["league_points"] > 0)
 columns = ["league_adjusted_rank", "player", "team", "position", "current_adp", "league_adjusted_adp", "adp_change", "reference_points", "league_points", "reference_pos_rank", "league_pos_rank", "league_scarcity_value", "scarcity_delta", "has_usable_projection", "market_adp_available"]
 view = view[columns].rename(columns={"league_adjusted_rank": "Adjusted rank", "player": "Player", "team": "Team", "position": "Position", "current_adp": "Current ADP", "league_adjusted_adp": "League-adjusted ADP", "adp_change": "ADP change", "reference_points": "Reference points", "league_points": "League points", "reference_pos_rank": "Reference pos rank", "league_pos_rank": "League pos rank", "league_scarcity_value": "League scarcity value", "scarcity_delta": "Scarcity change", "has_usable_projection": "Usable projection", "market_adp_available": "Sleeper ADP available"})
 st.dataframe(view, use_container_width=True, hide_index=True, column_config={"Current ADP": st.column_config.NumberColumn(format="%.1f"), "League-adjusted ADP": st.column_config.NumberColumn(format="%.1f"), "ADP change": st.column_config.NumberColumn(format="%+.1f"), "Reference points": st.column_config.NumberColumn(format="%.1f"), "League points": st.column_config.NumberColumn(format="%.1f"), "League scarcity value": st.column_config.NumberColumn(format="%.3f"), "Scarcity change": st.column_config.NumberColumn(format="%+.3f")})

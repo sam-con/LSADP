@@ -75,6 +75,28 @@ def _local_curve_gaps(curve: np.ndarray) -> np.ndarray:
     return np.asarray(output)
 
 
+def _curve_coordinates(curve: np.ndarray) -> np.ndarray:
+    """Make tied curve values strictly ordered without moving the next tier.
+
+    A zero-VORP tail still has a meaningful market order.  Each tied run starts
+    at its original value and receives a tiny deterministic decrement within
+    that run.  Starting each run at zero (rather than at its absolute positional
+    rank) lets, for example, league RB32 map cleanly to the reference's first
+    zero-VORP RB slot even if that reference slot is RB37.
+    """
+    values = np.asarray(curve, dtype=float)
+    output = values.copy()
+    step = max(float(np.nanmax(np.abs(values))) if len(values) else 0.0, 1.0) * 1e-9
+    start = 0
+    while start < len(values):
+        end = start + 1
+        while end < len(values) and values[end] == values[start]:
+            end += 1
+        output[start:end] -= np.arange(end - start, dtype=float) * step
+        start = end
+    return output
+
+
 def _market_slots(reference: pd.DataFrame, league: pd.DataFrame) -> pd.DataFrame:
     """Expected VORP curves at existing market slots (QB1, QB2, RB1, ...)."""
     pieces: list[pd.DataFrame] = []
@@ -90,7 +112,13 @@ def _market_slots(reference: pd.DataFrame, league: pd.DataFrame) -> pd.DataFrame
         market["reference_market_curve_value"] = ref_curve
         market["league_market_curve_value"] = league_curve
         market["local_reference_curve_gap"] = _local_curve_gaps(ref_curve)
-        pieces.append(market[["player_id", "market_pos_rank", "reference_market_curve_value", "league_market_curve_value", "local_reference_curve_gap"]])
+        # VORP is exactly zero at replacement and can be tied through a long
+        # depth segment.  The reference market still prices TE14, TE18, etc.
+        # differently.  Preserve each tied slot's order instead of averaging
+        # the segment into one ADP strength.
+        market["reference_curve_coordinate"] = _curve_coordinates(ref_curve)
+        market["league_curve_coordinate"] = _curve_coordinates(league_curve)
+        pieces.append(market[["player_id", "market_pos_rank", "reference_market_curve_value", "league_market_curve_value", "reference_curve_coordinate", "league_curve_coordinate", "local_reference_curve_gap"]])
     return pd.concat(pieces, ignore_index=True)
 
 
@@ -99,11 +127,11 @@ def _calibrate_position_curves(result: pd.DataFrame) -> pd.DataFrame:
     pieces: list[pd.DataFrame] = []
     for _, group in result.groupby("position", sort=False):
         slots = group.sort_values("market_pos_rank", kind="stable")
-        knots, fitted = _monotonic_fit(slots["reference_market_curve_value"].to_numpy(), slots["market_strength"].to_numpy())
-        lower_slope, upper_slope = _edge_slopes(slots["reference_market_curve_value"], slots["market_strength"])
+        knots, fitted = _monotonic_fit(slots["reference_curve_coordinate"].to_numpy(), slots["market_strength"].to_numpy())
+        lower_slope, upper_slope = _edge_slopes(slots["reference_curve_coordinate"], slots["market_strength"])
         group = group.copy()
-        group["reference_position_curve_strength"] = _apply_fit(group["reference_market_curve_value"], knots, fitted, lower_slope, upper_slope)
-        group["league_position_curve_strength"] = _apply_fit(group["league_market_curve_value"], knots, fitted, lower_slope, upper_slope)
+        group["reference_position_curve_strength"] = _apply_fit(group["reference_curve_coordinate"], knots, fitted, lower_slope, upper_slope)
+        group["league_position_curve_strength"] = _apply_fit(group["league_curve_coordinate"], knots, fitted, lower_slope, upper_slope)
         group["reference_curve_strength"] = _apply_fit(group["reference_scarcity_value"], knots, fitted, lower_slope, upper_slope)
         group["league_curve_strength"] = _apply_fit(group["league_scarcity_value"], knots, fitted, lower_slope, upper_slope)
         pieces.append(group)

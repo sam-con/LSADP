@@ -1,6 +1,7 @@
+import numpy as np
 import pandas as pd
 
-from src.adp_model import estimate_adjusted_adp
+from src.adp_model import _calibrate_position_curves, _curve_coordinates, estimate_adjusted_adp
 
 
 REFERENCE_ROSTER = ("QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX")
@@ -89,3 +90,33 @@ def test_zero_projection_players_have_zero_value_below_replacement_in_every_envi
     assert retired.reference_value_above_replacement == 0
     assert retired.league_value_above_replacement == 0
     assert retired.equivalent_rank_nudge <= 0
+
+
+def test_tied_replacement_vorp_slots_keep_their_own_reference_market_strength():
+    """A long zero-VORP tail must not collapse to one averaged ADP strength."""
+    ranks = np.arange(1, 21)
+    reference_values = np.concatenate(([1.0], np.zeros(19)))
+    frame = pd.DataFrame(
+        {
+            "position": "TE",
+            "market_pos_rank": ranks,
+            "market_strength": np.linspace(1.0, 0.2, 20),
+            "reference_curve_coordinate": reference_values - (ranks - 1) * 1e-9,
+            "league_curve_coordinate": np.concatenate(([1.0], np.linspace(0.20, 0.01, 19))) - (ranks - 1) * 1e-9,
+            "reference_scarcity_value": reference_values,
+            "league_scarcity_value": np.concatenate(([1.0], np.linspace(0.20, 0.01, 19))),
+        }
+    )
+    calibrated = _calibrate_position_curves(frame)
+    assert np.allclose(calibrated["reference_position_curve_strength"], frame["market_strength"])
+    # The second TE can move toward a better *TE market slot*, but it cannot
+    # inherit the strength averaged across the entire replacement-level tail.
+    assert calibrated.loc[1, "position_curve_delta"] < 0.1
+
+
+def test_tied_curve_coordinates_restart_at_each_tied_value():
+    coordinates = _curve_coordinates(np.array([0.5, 0.0, 0.0, 0.0, -0.2, -0.2]))
+    assert coordinates[1] == 0.0
+    assert coordinates[1] > coordinates[2] > coordinates[3] > coordinates[4]
+    assert coordinates[4] == -0.2
+    assert coordinates[4] > coordinates[5]

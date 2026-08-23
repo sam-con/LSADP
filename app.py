@@ -39,13 +39,27 @@ def _curve_chart(results: pd.DataFrame, position: str):
     ).properties(height=270, title=f"{position} scoring curve")
 
 
-def _movement_chart(results: pd.DataFrame):
-    chart_data = results.copy()
+def _drafted_player_count(draft: dict, fallback_teams: int, fallback_rounds: int) -> int:
+    """Return the number of selections on this Sleeper draft board."""
+    settings = draft.get("settings") or {}
+    try:
+        teams = int(settings.get("teams") or len(draft.get("draft_order") or {}) or fallback_teams)
+        rounds = int(settings.get("rounds") or fallback_rounds)
+    except (TypeError, ValueError):
+        teams, rounds = fallback_teams, fallback_rounds
+    return max(1, teams * rounds)
+
+
+def _movement_chart(results: pd.DataFrame, drafted_players: int):
+    # Use the current market's draftable player pool.  Players without a real
+    # market ADP are still in the table, but plotting hundreds of tail records
+    # obscures the decisions that can actually occur in this draft.
+    chart_data = results[results["current_adp"] <= drafted_players].copy()
     return alt.Chart(chart_data).mark_circle(size=55).encode(
-        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(zero=True)),
-        y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(zero=True)),
+        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players])),
+        y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(domain=[0, drafted_players])),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
-    ).properties(height=370, title="Market ADP vs league-adjusted ADP")
+    ).properties(height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)")
 
 
 def _run(draft_id: str):
@@ -108,8 +122,9 @@ except Exception as exc:  # Last-resort UI boundary; details remain available in
 
 league_name = league.get("name") or "Sleeper league"
 teams = _league_teams(league)
+drafted_players = _drafted_player_count(draft, teams, len(league.get("roster_positions") or []))
 st.subheader(league_name)
-st.caption(f"{teams} teams · Draft {draft.get('draft_id', draft_id)} · {len(results)} projected QB/RB/WR/TE players")
+st.caption(f"{teams} teams · {drafted_players} picks · Draft {draft.get('draft_id', draft_id)} · {len(results)} projected QB/RB/WR/TE players")
 st.info(f"Reference market selected: **{reference.name}** (Sleeper `{reference.adp_field}`). Your exact league scoring is still used for league projections and scarcity adjustments.")
 if unsupported:
     st.warning("These non-zero Sleeper scoring rules are not modeled because season projections do not provide a direct matching counting stat: " + ", ".join(f"`{rule}`" for rule in unsupported) + ". Their effect is excluded from this V1 estimate.")
@@ -120,7 +135,7 @@ with left:
     st.markdown("#### Position impact")
     st.dataframe(impact.style.format({"mean_curve_change": "+.3f", "mean_adp_change": "+.1f"}), use_container_width=True, hide_index=True)
 with right:
-    st.altair_chart(_movement_chart(results), use_container_width=True)
+    st.altair_chart(_movement_chart(results, drafted_players), use_container_width=True)
 
 st.markdown("#### Positional scoring curves")
 tabs = st.tabs(["QB", "RB", "WR", "TE"])

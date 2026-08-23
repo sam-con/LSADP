@@ -62,7 +62,26 @@ def _run(draft_id: str):
     players = _score_frame(players, dict(reference.scoring_settings), "reference_points")
     players = _score_frame(players, scoring, "league_points")
     results, summaries = estimate_adjusted_adp(players, "reference_points", "league_points", list(reference.roster_positions), roster, reference.teams, _league_teams(league))
-    return draft, league, results, summaries, unsupported_scoring_rules(scoring), reference
+    return draft, league, results, summaries, unsupported_scoring_rules(scoring, roster), reference
+
+
+def _position_impact(results: pd.DataFrame) -> pd.DataFrame:
+    """Build the summary defensively during Streamlit Cloud cache transitions."""
+    impact_source = results.copy()
+    # A warm Cloud process can briefly hold a result made by an older model
+    # revision.  Keep the results page usable while the endpoint caches refresh.
+    if "position_curve_delta" in impact_source:
+        impact_source["mean_curve_change"] = impact_source["position_curve_delta"]
+    elif "position_impact" in impact_source:
+        impact_source["mean_curve_change"] = impact_source["position_impact"]
+    else:
+        impact_source["mean_curve_change"] = 0.0
+    impact_source["mean_adp_change"] = impact_source.get("adp_change", pd.Series(0.0, index=impact_source.index))
+    return impact_source.groupby("position", as_index=False).agg(
+        mean_curve_change=("mean_curve_change", "mean"),
+        mean_adp_change=("mean_adp_change", "mean"),
+        players=("player_id", "count"),
+    )
 
 
 st.title("League-specific fantasy ADP")
@@ -95,7 +114,7 @@ st.info(f"Reference market selected: **{reference.name}** (Sleeper `{reference.a
 if unsupported:
     st.warning("These non-zero Sleeper scoring rules are not modeled because season projections do not provide a direct matching counting stat: " + ", ".join(f"`{rule}`" for rule in unsupported) + ". Their effect is excluded from this V1 estimate.")
 
-impact = results.groupby("position", as_index=False).agg(mean_curve_change=("position_curve_delta", "mean"), mean_adp_change=("adp_change", "mean"), players=("player_id", "count"))
+impact = _position_impact(results)
 left, right = st.columns((1, 2))
 with left:
     st.markdown("#### Position impact")

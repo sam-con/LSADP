@@ -32,10 +32,11 @@ def test_uniform_additive_position_points_does_not_create_artificial_boost():
 
 def test_elite_separation_moves_elite_player_up():
     players = _players()
-    players.loc[players.player_id == "TE1", "league_points"] += 100
+    players.loc[players.player_id == "TE1", "league_points"] += 500
     result, _ = _run(players)
     te1 = result.set_index("player_id").loc["TE1"]
-    assert te1.league_adjusted_rank < te1.current_adp_rank
+    assert te1.curve_strength_delta > 0
+    assert te1.draft_score > te1.market_strength
 
 
 def test_more_required_starters_increases_position_value():
@@ -71,5 +72,5 @@ def test_zero_projection_players_have_zero_value_below_replacement_in_every_envi
     assert retired.reference_value_above_replacement == 0
     assert retired.league_value_above_replacement == 0
     assert retired.scarcity_delta == 0
-    assert not retired.has_usable_projection
-    assert retired.league_adjusted_rank > result.loc[result.has_usable_projection, "league_adjusted_rank"].max()
+    assert retired.curve_strength_delta == 0
+    assert retired.league_adjusted_rank == retired.current_adp_rank

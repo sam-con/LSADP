@@ -56,15 +56,16 @@ Sleeper's current public projection payload offers only `adp_2qb` for the Superf
 2. For QB/RB/WR/TE, sort projected points and construct positional curves. The model records rank, percentile, local next-player slope, value above a dynamic replacement benchmark, and elite/replacement separation.
 3. Direct starter slots come from `roster_positions`. FLEX slots are allocated RB 40% / WR 45% / TE 15%; SUPER_FLEX slots QB 45% / RB 20% / WR 25% / TE 10%. The replacement benchmark is 1.5 times estimated league-wide starter demand. These allocation assumptions are explicit and intentionally easy to replace.
 4. `scarcity_value` is value above replacement divided by the median elite-to-replacement gap across positions, with a modest starter-demand weight. The pooled scale is important: a league-wide point-scale increase does not manufacture value.
-5. The model uses only **the change** from reference scarcity value to league scarcity value. It adds a robustly scaled, damped version of that change to the log of the original market ADP.
-6. All players are re-ranked together. Their new ranks receive the sorted original ADP curve (with tiny tie-breaking increments), preserving its practical draft shape while yielding a coherent, unique adjusted board.
+5. The model calibrates a monotonic **reference VOR → market draft-strength** curve from the reference projections and current Sleeper ADP. League-specific VOR is passed through that same curve.
+6. The resulting adjustment has two deliberately limited parts: a 20% position-curve change, plus a 5% player-specific residual. The first changes how positions interleave; the second allows modest within-position movement when a player's scoring profile changes unusually.
+7. All players are re-ranked together. Their new ranks receive the sorted original ADP curve (with tiny tie-breaking increments), preserving its practical draft shape while yielding a coherent, unique adjusted board.
 
 Consequences by design:
 
 - A uniform additive point increase to one position cancels out of value above replacement.
 - A broad equivalent change in total fantasy-point scale is normalized away.
 - A change that increases elite-to-replacement separation or starts more players at a position can alter its relative draft value.
-- The original ADP remains the market prior; projections only provide an interpretable league-specific adjustment.
+- The original ADP remains the dominant market prior; projections only provide a calibrated, interpretable league-specific adjustment rather than a fresh projection ranking.
 
 ## Tests
 

@@ -95,11 +95,11 @@ st.info(f"Reference market selected: **{reference.name}** (Sleeper `{reference.a
 if unsupported:
     st.warning("These non-zero Sleeper scoring rules are not modeled because season projections do not provide a direct matching counting stat: " + ", ".join(f"`{rule}`" for rule in unsupported) + ". Their effect is excluded from this V1 estimate.")
 
-impact = results.groupby("position", as_index=False).agg(mean_scarcity_change=("scarcity_delta", "mean"), mean_adp_change=("adp_change", "mean"), players=("player_id", "count"))
+impact = results.groupby("position", as_index=False).agg(mean_curve_change=("position_curve_delta", "mean"), mean_adp_change=("adp_change", "mean"), players=("player_id", "count"))
 left, right = st.columns((1, 2))
 with left:
     st.markdown("#### Position impact")
-    st.dataframe(impact.style.format({"mean_scarcity_change": "+.3f", "mean_adp_change": "+.1f"}), use_container_width=True, hide_index=True)
+    st.dataframe(impact.style.format({"mean_curve_change": "+.3f", "mean_adp_change": "+.1f"}), use_container_width=True, hide_index=True)
 with right:
     st.altair_chart(_movement_chart(results), use_container_width=True)
 

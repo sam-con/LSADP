@@ -3,3 +3,4 @@ pandas>=2.2
 numpy>=1.26
 altair>=5.4
 requests>=2.32
+scipy>=1.13

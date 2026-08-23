@@ -39,9 +39,26 @@ def test_elite_separation_moves_elite_player_up():
     assert te1.draft_score > te1.market_strength
 
 
+def test_player_specific_scoring_residual_can_change_market_slot_within_position():
+    players = _players()
+    players.loc[players.player_id == "TE6", "league_points"] += 500
+    result, _ = _run(players)
+    te6 = result.set_index("player_id").loc["TE6"]
+    assert te6.equivalent_rank_nudge > 0
+    assert te6.adjusted_market_pos_rank < te6.market_pos_rank
+
+
 def test_more_required_starters_increases_position_value():
     players = _players()
-    result, _ = _run(players, ("QB", "RB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX"))
+    result, _ = estimate_adjusted_adp(
+        players,
+        "reference_points",
+        "league_points",
+        ("QB", "RB", "WR", "TE"),
+        ("QB", "RB", "RB", "RB", "WR", "WR", "TE"),
+        1,
+        2,
+    )
     rb1 = result.set_index("player_id").loc["RB1"]
     assert rb1.league_scarcity_value > rb1.reference_scarcity_value
 
@@ -71,6 +88,4 @@ def test_zero_projection_players_have_zero_value_below_replacement_in_every_envi
     retired = result.set_index("player_id").loc["retired_qb"]
     assert retired.reference_value_above_replacement == 0
     assert retired.league_value_above_replacement == 0
-    assert retired.scarcity_delta == 0
-    assert retired.curve_strength_delta == 0
-    assert retired.league_adjusted_rank == retired.current_adp_rank
+    assert retired.equivalent_rank_nudge <= 0

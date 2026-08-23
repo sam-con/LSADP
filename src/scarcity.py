@@ -30,8 +30,10 @@ def starter_demand(roster_positions: Iterable[str], teams: int) -> dict[str, flo
 
 
 def _replacement_rank(total_starters: float, player_count: int) -> int:
-    # Replacement pool extends beyond starters: a manager's first viable bench/waiver alternative.
-    return min(player_count, max(1, int(math.ceil(total_starters * 1.5))))
+    # Replacement is the first player after all league-wide starting slots have
+    # been filled. Bench/depth value belongs in the observed ADP curve, not in an
+    # arbitrary extension of the replacement pool.
+    return min(player_count, max(1, int(math.ceil(total_starters)) + 1))
 
 
 def build_scarcity_frame(players: pd.DataFrame, points_column: str, roster_positions: Iterable[str], teams: int) -> tuple[pd.DataFrame, dict[str, dict]]:
@@ -51,9 +53,8 @@ def build_scarcity_frame(players: pd.DataFrame, points_column: str, roster_posit
         replacement_points = float(group.iloc[replacement_rank - 1][points_column])
         group["replacement_rank"] = replacement_rank
         group["replacement_points"] = replacement_points
-        # A player below replacement has no negative draft value. Allowing negative
-        # values makes a change in the replacement benchmark look like a gain for
-        # a zero-projection player (for example, a retired QB with legacy ADP).
+        # Traditional VORP is value *above* replacement. Depth players remain in
+        # the market ADP curve, but do not receive a positional-scarcity boost.
         group["value_above_replacement"] = (group[points_column] - replacement_points).clip(lower=0.0)
         group["elite_separation"] = float(group.iloc[0][points_column]) - replacement_points
         group["replacement_separation"] = replacement_points - float(group.iloc[min(replacement_rank, len(group) - 1)][points_column])
@@ -73,7 +74,8 @@ def build_scarcity_frame(players: pd.DataFrame, points_column: str, roster_posit
     # Median cross-position elite-to-replacement gap removes league-wide point-scale changes.
     pooled_scale = float(np.median(ranges)) if ranges else 1.0
     result["pooled_curve_scale"] = max(pooled_scale, 1.0)
-    avg_demand = float(np.mean(list(demand.values()))) if demand else 1.0
-    result["demand_weight"] = 1.0 + 0.35 * ((result["starter_demand"] / max(avg_demand, 1.0)) - 1.0)
-    result["scarcity_value"] = (result["value_above_replacement"] / result["pooled_curve_scale"]) * result["demand_weight"]
+    # Starter demand is already expressed in each position's replacement rank.
+    # Applying a second demand multiplier would double-count roster scarcity.
+    result["demand_weight"] = 1.0
+    result["scarcity_value"] = result["value_above_replacement"] / result["pooled_curve_scale"]
     return result, summary

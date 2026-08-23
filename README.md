@@ -37,7 +37,7 @@ A live league response was also inspected before implementation. Its `scoring_se
 
 Sleeper scoring rules whose effect needs event-level distributions—notably yardage-threshold bonuses and other rules with no matching projected counting field—are **not guessed**. The app reports them in a warning and excludes them from the calculation.
 
-Sleeper can retain legacy ADP for inactive or retired players. V1 treats value above replacement as a floor at zero: a player below replacement—including a zero-projection legacy record—has no negative scarcity value that could turn into an artificial gain when a league changes its replacement benchmark. These records are retained and flagged in the table, but rank after every player with a usable projected point total; historical ADP cannot outweigh an absence of projected production.
+Sleeper can retain legacy ADP for inactive or retired players. VORP is floored at zero below replacement: those depth players remain on the market board, but do not receive a positional-scarcity boost merely because a league changes its replacement benchmark.
 
 ## Reference league
 
@@ -54,10 +54,10 @@ Sleeper's current public projection payload offers only `adp_2qb` for the Superf
 
 1. Re-score every player from projected statistical categories and the actual league's `scoring_settings`. Reference points are independently scored from the reference configuration.
 2. For QB/RB/WR/TE, sort projected points and construct positional curves. The model records rank, percentile, local next-player slope, value above a dynamic replacement benchmark, and elite/replacement separation.
-3. Direct starter slots come from `roster_positions`. FLEX slots are allocated RB 40% / WR 45% / TE 15%; SUPER_FLEX slots QB 45% / RB 20% / WR 25% / TE 10%. The replacement benchmark is 1.5 times estimated league-wide starter demand. These allocation assumptions are explicit and intentionally easy to replace.
-4. `scarcity_value` is value above replacement divided by the median elite-to-replacement gap across positions, with a modest starter-demand weight. The pooled scale is important: a league-wide point-scale increase does not manufacture value.
-5. The model calibrates a monotonic **reference VOR → market draft-strength** curve from the reference projections and current Sleeper ADP. League-specific VOR is passed through that same curve.
-6. The resulting adjustment has two deliberately limited parts: a 20% position-curve change, plus a 5% player-specific residual. The first changes how positions interleave; the second allows modest within-position movement when a player's scoring profile changes unusually.
+3. Direct starter slots come from `roster_positions`. FLEX slots are allocated RB 40% / WR 45% / TE 15%; SUPER_FLEX slots QB 45% / RB 20% / WR 25% / TE 10%. Replacement is the first player after the resulting league-wide starter boundary: an 8-team, 3QB league uses QB25—not an arbitrary deeper QB36—for VORP.
+4. `scarcity_value` is VORP divided by the median elite-to-replacement gap across positions. Starter demand enters only through the replacement rank; no second demand multiplier is applied. The pooled scale is important: a league-wide point-scale increase does not manufacture value.
+5. The model calibrates a monotonic, position-specific **reference VORP → market-slot draft strength** curve from reference projections and current Sleeper ADP. League-specific positional VORP curves are passed through their corresponding reference curves.
+6. The full reference-calibrated position-curve change determines how positions interleave. For within-position movement, the model removes the position-wide change, converts the remaining player-specific VORP residual into equivalent market ranks using the local reference VORP slope, and scales it by that position's observed reference projection/market agreement. This lets scoring-sensitive players nudge into nearby existing market slots without a fixed projection-weight constant.
 7. All players are re-ranked together. Their new ranks receive the sorted original ADP curve (with tiny tie-breaking increments), preserving its practical draft shape while yielding a coherent, unique adjusted board.
 
 Consequences by design:

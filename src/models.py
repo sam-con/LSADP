@@ -1,211 +1,101 @@
-"""Domain models used across ingestion, modeling, and UI layers."""
+"""Shared configuration and result types."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Mapping
 
-import numpy as np
-import pandas as pd
 
-from src.config import (
-    CURVE_SELECTION_RELATIVE_IMPROVEMENT,
-    DEFAULT_COVERAGE_MIN_WEEKS,
-    DEFAULT_MIN_GAMES,
-    DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION,
-    DEFAULT_MIN_PLAYERS_BY_POSITION,
+CORE_POSITIONS = ("QB", "RB", "WR", "TE")
+
+
+@dataclass(frozen=True)
+class ReferenceLeague:
+    """All V1 market assumptions live in one easy-to-change place."""
+
+    name: str = "12-team Superflex PPR"
+    teams: int = 12
+    scoring_settings: Mapping[str, float] = field(
+        default_factory=lambda: {
+            "pass_yd": 0.04,
+            "pass_td": 4.0,
+            "pass_2pt": 2.0,
+            "pass_int": -2.0,
+            "rush_yd": 0.1,
+            "rush_td": 6.0,
+            "rush_2pt": 2.0,
+            "rec": 1.0,
+            "rec_yd": 0.1,
+            "rec_td": 6.0,
+            "rec_2pt": 2.0,
+            "fum_lost": -2.0,
+        }
+    )
+    roster_positions: tuple[str, ...] = (
+        "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "SUPER_FLEX", "BN", "BN", "BN", "BN", "BN", "BN",
+    )
+    adp_field: str = "adp_2qb"
+
+
+ONE_QB_ROSTER = (
+    "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN", "BN",
 )
 
 
-class LSADPError(Exception):
-    """Base application error."""
+def _reference_scoring(receptions: float) -> dict[str, float]:
+    return {
+        "pass_yd": 0.04,
+        "pass_td": 4.0,
+        "pass_2pt": 2.0,
+        "pass_int": -2.0,
+        "rush_yd": 0.1,
+        "rush_td": 6.0,
+        "rush_2pt": 2.0,
+        "rec": receptions,
+        "rec_yd": 0.1,
+        "rec_td": 6.0,
+        "rec_2pt": 2.0,
+        "fum_lost": -2.0,
+    }
 
 
-class ConfigError(LSADPError):
-    """Raised when local configuration or artifacts are missing."""
+DEFAULT_REFERENCE = ReferenceLeague()
 
 
-class SleeperAPIError(LSADPError):
-    """Raised for invalid or unavailable Sleeper API responses."""
+def select_reference_league(scoring_settings: Mapping[str, object], roster_positions: tuple[str, ...] | list[str]) -> ReferenceLeague:
+    """Choose the closest Sleeper market baseline from roster and reception scoring.
 
-
-class HistoricalDataError(LSADPError):
-    """Raised when historical data is incomplete or malformed."""
-
-
-class ScoringConsistencyError(HistoricalDataError):
-    """Raised when league scoring changes across the required window."""
-
-
-class CoverageError(HistoricalDataError):
-    """Raised when historical coverage is too sparse to fit reliable curves."""
-
-
-class CurveFitError(LSADPError):
-    """Raised when curve fitting fails."""
-
-
-@dataclass(slots=True)
-class LeagueSettings:
-    league_id: str
-    name: str
-    season: int
-    total_rosters: int
-    scoring_settings: dict[str, float]
-    roster_positions: list[str]
-    previous_league_id: str | None = None
-    playoff_week_start: int | None = None
-
-    def mandatory_starter_counts(self) -> dict[str, int]:
-        counts = {position: 0 for position in ("QB", "RB", "WR", "TE")}
-        for slot in self.roster_positions:
-            if slot in counts:
-                counts[slot] += 1
-        return counts
-
-    def flex_slots(self) -> int:
-        return sum(1 for slot in self.roster_positions if slot == "FLEX")
-
-    def superflex_slots(self) -> int:
-        return sum(1 for slot in self.roster_positions if slot == "SUPER_FLEX")
-
-    def bench_size(self) -> int:
-        ignored = {"BN", "IR", "TAXI"}
-        return sum(1 for slot in self.roster_positions if slot in ignored)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class HistoricalLeagueSummary:
-    league_id: str
-    season: int
-    scoring_settings: dict[str, float]
-    roster_positions: list[str]
-    total_rosters: int
-    previous_league_id: str | None = None
-    playoff_week_start: int | None = None
-
-
-@dataclass(slots=True)
-class ScoringDifference:
-    season: int
-    key: str
-    current_value: float | None
-    historical_value: float | None
-
-
-@dataclass(slots=True)
-class HistoricalCoverage:
-    season: int
-    weeks_loaded: int
-    unique_player_weeks: int
-    unique_players: int
-    unique_players_by_position: dict[str, int]
-    deepest_rank_by_position: dict[str, int]
-
-
-@dataclass(slots=True)
-class CurveFitResult:
-    position: str
-    model_name: str
-    a: float
-    c: float
-    k: float
-    rmse: float
-    mae: float
-    r2: float
-    aic: float
-    bic: float
-    cv_rmse: float
-    historical_window: str
-    replacement_rank: int | None = None
-    replacement_ppg: float | None = None
-
-    def evaluate(self, rank: float) -> float:
-        return float(self.a * np.exp(-self.c * (rank - 1)) + self.k)
-
-
-@dataclass(slots=True)
-class ReplacementLevel:
-    position: str
-    method: str
-    replacement_rank: int
-    replacement_ppg: float
-
-
-@dataclass(slots=True)
-class CalibrationResult:
-    position: str
-    metric_name: str
-    intercept: float
-    coefficient: float
-    r2: float
-    weighted_rmse: float
-
-
-@dataclass(slots=True)
-class BaselineArtifacts:
-    curves: pd.DataFrame
-    replacement: pd.DataFrame
-    model: pd.DataFrame
-    metadata: dict[str, Any]
-
-
-@dataclass(slots=True)
-class CanonicalArtifacts:
-    curves: pd.DataFrame
-    replacement: pd.DataFrame
-    market_calibration: pd.DataFrame
-    model_parameters: pd.DataFrame
-    validation: pd.DataFrame
-    canonical_config: dict[str, Any]
-    metadata: dict[str, Any]
-    history_position_environments: pd.DataFrame = field(default_factory=pd.DataFrame)
-    history_environment_seasons: pd.DataFrame = field(default_factory=pd.DataFrame)
-    history_curve_models: pd.DataFrame = field(default_factory=pd.DataFrame)
-    history_curves: pd.DataFrame = field(default_factory=pd.DataFrame)
-    history_library_metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class ValidationMetrics:
-    model_name: str
-    spearman: float
-    pearson: float
-    mae: float
-    median_absolute_error: float
-    weighted_mae: float
-    rmse: float
-    pairwise_accuracy: float
-    top_12_overlap: float
-    top_24_overlap: float
-    top_50_overlap: float
-    top_100_overlap: float
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
-class ModelingConfig:
-    min_games: int = 4
-    aggregation: str = "median"
-    recency_weights: dict[int, float] = field(default_factory=dict)
-    min_coverage_weeks: int = 10
-    min_player_weeks_by_position: dict[str, int] = field(default_factory=dict)
-    min_players_by_position: dict[str, int] = field(default_factory=dict)
-    curve_selection_relative_improvement: float = 0.02
-
-
-def default_modeling_config() -> ModelingConfig:
-    return ModelingConfig(
-        min_games=DEFAULT_MIN_GAMES,
-        aggregation="median",
-        recency_weights={},
-        min_coverage_weeks=DEFAULT_COVERAGE_MIN_WEEKS,
-        min_player_weeks_by_position=DEFAULT_MIN_PLAYER_WEEKS_BY_POSITION.copy(),
-        min_players_by_position=DEFAULT_MIN_PLAYERS_BY_POSITION.copy(),
-        curve_selection_relative_improvement=CURVE_SELECTION_RELATIVE_IMPROVEMENT,
+    Sleeper supplies standard, half-PPR, and PPR ADP for 1QB, and an `adp_2qb`
+    market for Superflex/2QB. Other custom scoring is modeled as an adjustment to
+    the nearest available market rather than pretending a bespoke market exists.
+    """
+    slots = [str(slot).upper() for slot in (roster_positions or [])]
+    is_two_qb_market = any(slot in {"SUPER_FLEX", "SUPERFLEX", "OP"} for slot in slots) or slots.count("QB") >= 2
+    try:
+        receptions = float((scoring_settings or {}).get("rec", 0) or 0)
+    except (TypeError, ValueError):
+        receptions = 0.0
+    nearest_reception = min((0.0, 0.5, 1.0), key=lambda value: abs(value - receptions))
+    if is_two_qb_market:
+        # Sleeper's public season payload exposes a single 2QB/SF ADP market.
+        return ReferenceLeague(
+            name="12-team Superflex PPR market",
+            scoring_settings=_reference_scoring(1.0),
+            roster_positions=DEFAULT_REFERENCE.roster_positions,
+            adp_field="adp_2qb",
+        )
+    labels = {0.0: ("Standard", "adp_std"), 0.5: ("Half PPR", "adp_half_ppr"), 1.0: ("PPR", "adp_ppr")}
+    label, adp_field = labels[nearest_reception]
+    return ReferenceLeague(
+        name=f"12-team 1QB {label} market",
+        scoring_settings=_reference_scoring(nearest_reception),
+        roster_positions=ONE_QB_ROSTER,
+        adp_field=adp_field,
     )
+
+
+@dataclass
+class ScoringResult:
+    points: float
+    applied_rules: dict[str, float]
+    unsupported_rules: list[str]

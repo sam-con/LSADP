@@ -1,2 +1,1 @@
-"""League-specific ADP application package."""
-
+"""League-specific fantasy football ADP estimator."""

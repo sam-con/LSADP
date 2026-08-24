@@ -150,6 +150,22 @@ def _position_reliability(result: pd.DataFrame) -> pd.Series:
     return result["position"].map(reliability).astype(float)
 
 
+def _scoring_rank_shift(result: pd.DataFrame, reference_scoring: str, league_scoring: str) -> pd.Series:
+    """Measure only player-specific reordering caused by scoring changes.
+
+    Roster demand changes the *position curve*, not which WR is better than
+    another WR.  Comparing reference and league projection ranks directly keeps
+    that distinction: an affine scoring change has no effect, while reception,
+    touchdown, or first-down rules can move players whose stat profiles differ.
+    """
+    shifts = pd.Series(0.0, index=result.index)
+    for _, group in result.groupby("position"):
+        reference_rank = group[reference_scoring].rank(method="average", ascending=False)
+        league_rank = group[league_scoring].rank(method="average", ascending=False)
+        shifts.loc[group.index] = reference_rank - league_rank
+    return shifts
+
+
 def _assign_adjusted_market_slots(result: pd.DataFrame) -> pd.DataFrame:
     """Assign nudged players to nearby existing market slots, not fresh projected ADPs."""
     slot_columns = ["position", "market_pos_rank", "market_strength", "position_curve_delta"]
@@ -182,11 +198,11 @@ def estimate_adjusted_adp(players: pd.DataFrame, reference_scoring: str, league_
     result["market_strength"] = 1 - (result["current_adp_rank"] - 1) / max(len(result) - 1, 1)
     result = _calibrate_position_curves(result)
 
-    # Player-specific scoring change beyond the new league's expected curve at
-    # that market slot becomes an equivalent number of within-position ranks.
-    result["within_position_vor_residual"] = result["scarcity_delta"] - (result["league_market_curve_value"] - result["reference_market_curve_value"])
+    # Only changes in a player's scoring profile can reshuffle players within a
+    # position.  Replacement-level and roster changes are already represented
+    # by the positional curve and must not turn a market WR23 into WR1.
+    result["raw_equivalent_rank_nudge"] = _scoring_rank_shift(result, reference_scoring, league_scoring)
     result["projection_market_reliability"] = _position_reliability(result)
-    result["raw_equivalent_rank_nudge"] = result["within_position_vor_residual"] / result["local_reference_curve_gap"]
     result["equivalent_rank_nudge"] = result["projection_market_reliability"] * result["raw_equivalent_rank_nudge"]
     result["within_position_score"] = result["market_pos_rank"] - result["equivalent_rank_nudge"]
     result = _assign_adjusted_market_slots(result)

@@ -30,6 +30,10 @@ def projection_records_to_frame(records: Iterable[dict], adp_field: str) -> pd.D
         first = player.get("first_name") or ""
         last = player.get("last_name") or ""
         name = f"{first} {last}".strip() or str(record.get("player_id", "Unknown"))
+        try:
+            is_rookie = int(player.get("years_exp")) == 0
+        except (TypeError, ValueError):
+            is_rookie = False
         rows.append(
             {
                 "player_id": str(record.get("player_id", "")),
@@ -37,11 +41,12 @@ def projection_records_to_frame(records: Iterable[dict], adp_field: str) -> pd.D
                 "team": player.get("team") or record.get("team") or "FA",
                 "position": position,
                 "current_adp": adp,
+                "is_rookie": is_rookie,
                 "stats": stats,
             }
         )
     if not rows:
-        return pd.DataFrame(columns=["player_id", "player", "team", "position", "current_adp", "stats"])
+        return pd.DataFrame(columns=["player_id", "player", "team", "position", "current_adp", "is_rookie", "stats"])
     frame = pd.DataFrame(rows).drop_duplicates("player_id", keep="first")
     # Sleeper uses 999/null for unavailable ADP. Give unmarketed projected players a deterministic
     # tail value so they remain visible without claiming a real market ADP.

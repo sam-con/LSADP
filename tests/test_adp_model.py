@@ -31,6 +31,21 @@ def test_uniform_additive_position_points_does_not_create_artificial_boost():
     assert result.set_index("player_id").loc["WR1", "league_adjusted_rank"] == result.set_index("player_id").loc["WR1", "current_adp_rank"]
 
 
+def test_roster_changes_do_not_reshuffle_players_within_a_position():
+    players = _players()
+    result, _ = estimate_adjusted_adp(
+        players,
+        "reference_points",
+        "league_points",
+        REFERENCE_ROSTER,
+        ("QB", "RB", "RB", "WR", "WR", "TE", "FLEX"),
+        2,
+        2,
+    )
+    assert result["raw_equivalent_rank_nudge"].eq(0).all()
+    assert result["adjusted_market_pos_rank"].eq(result["market_pos_rank"]).all()
+
+
 def test_elite_separation_moves_elite_player_up():
     players = _players()
     players.loc[players.player_id == "TE1", "league_points"] += 500

@@ -147,7 +147,10 @@ for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
 
 st.markdown("#### Player board")
 positions = st.multiselect("Positions", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"])
+rookies_only = st.checkbox("Rookies only")
 view = results[results.position.isin(positions)].copy()
+if rookies_only:
+    view = view[view.get("is_rookie", pd.Series(False, index=view.index)).fillna(False)]
 # Calculate this in the presentation layer as well as the model layer so an
 # older cached result cannot make the table fail during a Cloud redeploy.
 view["has_usable_projection"] = (view["reference_points"] > 0) | (view["league_points"] > 0)

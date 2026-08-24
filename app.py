@@ -11,7 +11,7 @@ import streamlit as st
 from src.adp_model import estimate_adjusted_adp
 from src.models import DEFAULT_REFERENCE, select_reference_league
 from src.projections import projection_records_to_frame
-from src.scoring import score_projection, unsupported_scoring_rules
+from src.scoring import score_projection
 from src.sleeper import SleeperAPIError, fetch_draft_league, fetch_projections, validate_draft_id
 
 st.set_page_config(page_title="League ADP", page_icon="🏈", layout="wide")
@@ -62,6 +62,41 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     ).properties(height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)")
 
 
+def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int):
+    """Compare each position's observed market slots with its adjusted slots."""
+    rows = []
+    for position in ("QB", "RB", "WR", "TE"):
+        group = results[results["position"] == position]
+        reference = group[group["current_adp"] <= drafted_players].sort_values("market_pos_rank")
+        adjusted = group[group["league_adjusted_adp"] <= drafted_players].sort_values("adjusted_market_pos_rank")
+        rows.extend(
+            {
+                "Position": position,
+                "Environment": "Reference market",
+                "Positional slot": row.market_pos_rank,
+                "Overall ADP": row.current_adp,
+                "Player": row.player,
+            }
+            for row in reference.itertuples()
+        )
+        rows.extend(
+            {
+                "Position": position,
+                "Environment": "League-adjusted",
+                "Positional slot": row.adjusted_market_pos_rank,
+                "Overall ADP": row.league_adjusted_adp,
+                "Player": row.player,
+            }
+            for row in adjusted.itertuples()
+        )
+    return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
+        x=alt.X("Positional slot:Q", title="Positional market slot"),
+        y=alt.Y("Overall ADP:Q", scale=alt.Scale(domain=[0, drafted_players], reverse=True)),
+        color=alt.Color("Environment:N", scale=alt.Scale(domain=["Reference market", "League-adjusted"], range=["#4c78a8", "#f58518"])),
+        tooltip=["Position:N", "Environment:N", "Player:N", "Positional slot:Q", alt.Tooltip("Overall ADP:Q", format=".1f")],
+    ).properties(height=240).facet(column=alt.Column("Position:N", sort=["QB", "RB", "WR", "TE"]), columns=2).resolve_scale(y="shared")
+
+
 def _run(draft_id: str):
     draft, league = fetch_draft_league(draft_id)
     scoring = league.get("scoring_settings") or {}
@@ -76,26 +111,7 @@ def _run(draft_id: str):
     players = _score_frame(players, dict(reference.scoring_settings), "reference_points")
     players = _score_frame(players, scoring, "league_points")
     results, summaries = estimate_adjusted_adp(players, "reference_points", "league_points", list(reference.roster_positions), roster, reference.teams, _league_teams(league))
-    return draft, league, results, summaries, unsupported_scoring_rules(scoring, roster), reference
-
-
-def _position_impact(results: pd.DataFrame) -> pd.DataFrame:
-    """Build the summary defensively during Streamlit Cloud cache transitions."""
-    impact_source = results.copy()
-    # A warm Cloud process can briefly hold a result made by an older model
-    # revision.  Keep the results page usable while the endpoint caches refresh.
-    if "position_curve_delta" in impact_source:
-        impact_source["mean_curve_change"] = impact_source["position_curve_delta"]
-    elif "position_impact" in impact_source:
-        impact_source["mean_curve_change"] = impact_source["position_impact"]
-    else:
-        impact_source["mean_curve_change"] = 0.0
-    impact_source["mean_adp_change"] = impact_source.get("adp_change", pd.Series(0.0, index=impact_source.index))
-    return impact_source.groupby("position", as_index=False).agg(
-        mean_curve_change=("mean_curve_change", "mean"),
-        mean_adp_change=("mean_adp_change", "mean"),
-        players=("player_id", "count"),
-    )
+    return draft, league, results, summaries, reference
 
 
 st.title("League-specific fantasy ADP")
@@ -112,7 +128,7 @@ if not submitted:
 try:
     draft_id = validate_draft_id(draft_id)
     with st.spinner("Loading Sleeper league settings, projections, and market ADP…"):
-        draft, league, results, summaries, unsupported, reference = _run(draft_id)
+        draft, league, results, summaries, reference = _run(draft_id)
 except (ValueError, SleeperAPIError) as exc:
     st.error(str(exc))
     st.stop()
@@ -126,16 +142,19 @@ drafted_players = _drafted_player_count(draft, teams, len(league.get("roster_pos
 st.subheader(league_name)
 st.caption(f"{teams} teams · {drafted_players} picks · Draft {draft.get('draft_id', draft_id)} · {len(results)} projected QB/RB/WR/TE players")
 st.info(f"Reference market selected: **{reference.name}** (Sleeper `{reference.adp_field}`). Your exact league scoring is still used for league projections and scarcity adjustments.")
-if unsupported:
-    st.warning("These non-zero Sleeper scoring rules are not modeled because season projections do not provide a direct matching counting stat: " + ", ".join(f"`{rule}`" for rule in unsupported) + ". Their effect is excluded from this V1 estimate.")
 
-impact = _position_impact(results)
-left, right = st.columns((1, 2))
-with left:
-    st.markdown("#### Position impact")
-    st.dataframe(impact.style.format({"mean_curve_change": "+.3f", "mean_adp_change": "+.1f"}), use_container_width=True, hide_index=True)
-with right:
-    st.altair_chart(_movement_chart(results, drafted_players), use_container_width=True)
+st.markdown("#### Player board")
+positions = st.multiselect("Positions", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"])
+view = results[results.position.isin(positions)].copy()
+# Calculate this in the presentation layer as well as the model layer so an
+# older cached result cannot make the table fail during a Cloud redeploy.
+view["has_usable_projection"] = (view["reference_points"] > 0) | (view["league_points"] > 0)
+columns = ["league_adjusted_rank", "player", "team", "position", "current_adp", "league_adjusted_adp", "adp_change", "reference_points", "league_points", "reference_pos_rank", "league_pos_rank", "league_scarcity_value", "scarcity_delta", "has_usable_projection", "market_adp_available"]
+view = view[columns].rename(columns={"league_adjusted_rank": "Adjusted rank", "player": "Player", "team": "Team", "position": "Position", "current_adp": "Current ADP", "league_adjusted_adp": "League-adjusted ADP", "adp_change": "ADP change", "reference_points": "Reference points", "league_points": "League points", "reference_pos_rank": "Reference pos rank", "league_pos_rank": "League pos rank", "league_scarcity_value": "League scarcity value", "scarcity_delta": "Scarcity change", "has_usable_projection": "Usable projection", "market_adp_available": "Sleeper ADP available"})
+st.dataframe(view, use_container_width=True, hide_index=True, column_config={"Current ADP": st.column_config.NumberColumn(format="%.1f"), "League-adjusted ADP": st.column_config.NumberColumn(format="%.1f"), "ADP change": st.column_config.NumberColumn(format="%+.1f"), "Reference points": st.column_config.NumberColumn(format="%.1f"), "League points": st.column_config.NumberColumn(format="%.1f"), "League scarcity value": st.column_config.NumberColumn(format="%.3f"), "Scarcity change": st.column_config.NumberColumn(format="%+.3f")})
+
+st.markdown("#### ADP movement")
+st.altair_chart(_movement_chart(results, drafted_players), use_container_width=True)
 
 st.markdown("#### Positional scoring curves")
 tabs = st.tabs(["QB", "RB", "WR", "TE"])
@@ -145,15 +164,6 @@ for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
         info = summaries["league"].get(position, {})
         st.caption(f"League replacement benchmark: {position}{info.get('replacement_rank', '—')} ({info.get('replacement_points', 0):.1f} projected points).")
 
-st.markdown("#### Player board")
-positions = st.multiselect("Positions", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"])
-rookies_only = st.checkbox("Rookies only")
-view = results[results.position.isin(positions)].copy()
-if rookies_only:
-    view = view[view.get("is_rookie", pd.Series(False, index=view.index)).fillna(False)]
-# Calculate this in the presentation layer as well as the model layer so an
-# older cached result cannot make the table fail during a Cloud redeploy.
-view["has_usable_projection"] = (view["reference_points"] > 0) | (view["league_points"] > 0)
-columns = ["league_adjusted_rank", "player", "team", "position", "current_adp", "league_adjusted_adp", "adp_change", "reference_points", "league_points", "reference_pos_rank", "league_pos_rank", "league_scarcity_value", "scarcity_delta", "has_usable_projection", "market_adp_available"]
-view = view[columns].rename(columns={"league_adjusted_rank": "Adjusted rank", "player": "Player", "team": "Team", "position": "Position", "current_adp": "Current ADP", "league_adjusted_adp": "League-adjusted ADP", "adp_change": "ADP change", "reference_points": "Reference points", "league_points": "League points", "reference_pos_rank": "Reference pos rank", "league_pos_rank": "League pos rank", "league_scarcity_value": "League scarcity value", "scarcity_delta": "Scarcity change", "has_usable_projection": "Usable projection", "market_adp_available": "Sleeper ADP available"})
-st.dataframe(view, use_container_width=True, hide_index=True, column_config={"Current ADP": st.column_config.NumberColumn(format="%.1f"), "League-adjusted ADP": st.column_config.NumberColumn(format="%.1f"), "ADP change": st.column_config.NumberColumn(format="%+.1f"), "Reference points": st.column_config.NumberColumn(format="%.1f"), "League points": st.column_config.NumberColumn(format="%.1f"), "League scarcity value": st.column_config.NumberColumn(format="%.3f"), "Scarcity change": st.column_config.NumberColumn(format="%+.3f")})
+st.markdown("#### Positional ADP curves")
+st.caption("Each panel compares the observed positional market curve with the curve produced by this league's scoring and roster environment.")
+st.altair_chart(_positional_adp_curve_chart(results, drafted_players), use_container_width=True)

@@ -32,7 +32,8 @@ def _curve_chart(results: pd.DataFrame, position: str):
     rows = []
     subset = results[results.position == position]
     for environment, rank_col, points_col in (("Reference", "reference_pos_rank", "reference_points"), ("League", "league_pos_rank", "league_points")):
-        rows.extend({"Environment": environment, "Positional rank": row[rank_col], "Projected points": row[points_col], "Player": row.player} for _, row in subset.iterrows())
+        projected = subset[subset[points_col] > 0]
+        rows.extend({"Environment": environment, "Positional rank": row[rank_col], "Projected points": row[points_col], "Player": row.player} for _, row in projected.iterrows())
     return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
         x=alt.X("Positional rank:Q", sort="ascending"), y=alt.Y("Projected points:Q"), color="Environment:N",
         tooltip=["Player:N", "Environment:N", "Positional rank:Q", alt.Tooltip("Projected points:Q", format=".1f")],
@@ -62,39 +63,36 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     ).properties(height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)")
 
 
-def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int):
-    """Compare each position's observed market slots with its adjusted slots."""
+def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, position: str):
+    """Compare one position's observed market slots with its adjusted slots."""
     rows = []
-    for position in ("QB", "RB", "WR", "TE"):
-        group = results[results["position"] == position]
-        reference = group[group["current_adp"] <= drafted_players].sort_values("market_pos_rank")
-        adjusted = group[group["league_adjusted_adp"] <= drafted_players].sort_values("adjusted_market_pos_rank")
-        rows.extend(
-            {
-                "Position": position,
-                "Environment": "Reference market",
-                "Positional slot": row.market_pos_rank,
-                "Overall ADP": row.current_adp,
-                "Player": row.player,
-            }
-            for row in reference.itertuples()
-        )
-        rows.extend(
-            {
-                "Position": position,
-                "Environment": "League-adjusted",
-                "Positional slot": row.adjusted_market_pos_rank,
-                "Overall ADP": row.league_adjusted_adp,
-                "Player": row.player,
-            }
-            for row in adjusted.itertuples()
-        )
+    group = results[results["position"] == position]
+    reference = group[group["current_adp"] <= drafted_players].sort_values("market_pos_rank")
+    adjusted = group[group["league_adjusted_adp"] <= drafted_players].sort_values("adjusted_market_pos_rank")
+    rows.extend(
+        {
+            "Environment": "Reference market",
+            "Positional slot": row.market_pos_rank,
+            "Overall ADP": row.current_adp,
+            "Player": row.player,
+        }
+        for row in reference.itertuples()
+    )
+    rows.extend(
+        {
+            "Environment": "League-adjusted",
+            "Positional slot": row.adjusted_market_pos_rank,
+            "Overall ADP": row.league_adjusted_adp,
+            "Player": row.player,
+        }
+        for row in adjusted.itertuples()
+    )
     return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
         x=alt.X("Positional slot:Q", title="Positional market slot"),
         y=alt.Y("Overall ADP:Q", scale=alt.Scale(domain=[0, drafted_players], reverse=True)),
         color=alt.Color("Environment:N", scale=alt.Scale(domain=["Reference market", "League-adjusted"], range=["#4c78a8", "#f58518"])),
-        tooltip=["Position:N", "Environment:N", "Player:N", "Positional slot:Q", alt.Tooltip("Overall ADP:Q", format=".1f")],
-    ).properties(height=240).facet(column=alt.Column("Position:N", sort=["QB", "RB", "WR", "TE"]), columns=2).resolve_scale(y="shared")
+        tooltip=["Environment:N", "Player:N", "Positional slot:Q", alt.Tooltip("Overall ADP:Q", format=".1f")],
+    ).properties(height=360, title=f"{position} ADP curve")
 
 
 def _run(draft_id: str):
@@ -165,5 +163,6 @@ for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
         st.caption(f"League replacement benchmark: {position}{info.get('replacement_rank', '—')} ({info.get('replacement_points', 0):.1f} projected points).")
 
 st.markdown("#### Positional ADP curves")
-st.caption("Each panel compares the observed positional market curve with the curve produced by this league's scoring and roster environment.")
-st.altair_chart(_positional_adp_curve_chart(results, drafted_players), use_container_width=True)
+st.caption("Compare the observed positional market curve with the curve produced by this league's scoring and roster environment.")
+adp_curve_position = st.selectbox("Position", ["QB", "RB", "WR", "TE"], key="adp-curve-position")
+st.altair_chart(_positional_adp_curve_chart(results, drafted_players, adp_curve_position), use_container_width=True)

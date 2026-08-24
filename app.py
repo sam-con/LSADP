@@ -56,11 +56,20 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     # market ADP are still in the table, but plotting hundreds of tail records
     # obscures the decisions that can actually occur in this draft.
     chart_data = results[results["current_adp"] <= drafted_players].copy()
-    return alt.Chart(chart_data).mark_circle(size=55).encode(
+    parity_line = alt.Chart(pd.DataFrame({"current_adp": [0, drafted_players], "league_adjusted_adp": [0, drafted_players]})).mark_line(
+        color="#9CA3AF", opacity=0.45, strokeDash=[5, 5]
+    ).encode(
+        x=alt.X("current_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
+        y=alt.Y("league_adjusted_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
+    )
+    points = alt.Chart(chart_data).mark_circle(size=55).encode(
         x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players])),
         y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(domain=[0, drafted_players])),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
-    ).properties(height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)")
+    )
+    return alt.layer(parity_line, points).properties(
+        height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)"
+    )
 
 
 def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, position: str):
@@ -154,9 +163,6 @@ columns = ["league_adjusted_rank", "player", "team", "position", "current_adp", 
 view = view[columns].rename(columns={"league_adjusted_rank": "Adjusted rank", "player": "Player", "team": "Team", "position": "Position", "current_adp": "Current ADP", "league_adjusted_adp": "League-adjusted ADP", "adp_change": "ADP change", "reference_points": "Reference points", "league_points": "League points", "reference_pos_rank": "Reference pos rank", "league_pos_rank": "League pos rank", "league_scarcity_value": "League scarcity value", "scarcity_delta": "Scarcity change", "has_usable_projection": "Usable projection", "market_adp_available": "Sleeper ADP available"})
 st.dataframe(view, use_container_width=True, hide_index=True, column_config={"Current ADP": st.column_config.NumberColumn(format="%.1f"), "League-adjusted ADP": st.column_config.NumberColumn(format="%.1f"), "ADP change": st.column_config.NumberColumn(format="%+.1f"), "Reference points": st.column_config.NumberColumn(format="%.1f"), "League points": st.column_config.NumberColumn(format="%.1f"), "League scarcity value": st.column_config.NumberColumn(format="%.3f"), "Scarcity change": st.column_config.NumberColumn(format="%+.3f")})
 
-st.markdown("#### ADP movement")
-st.altair_chart(_movement_chart(results, drafted_players), use_container_width=True)
-
 st.markdown("#### Positional scoring curves")
 tabs = st.tabs(["QB", "RB", "WR", "TE"])
 for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
@@ -171,3 +177,6 @@ adp_curve_tabs = st.tabs(["QB", "RB", "WR", "TE"])
 for tab, position in zip(adp_curve_tabs, ("QB", "RB", "WR", "TE")):
     with tab:
         st.altair_chart(_positional_adp_curve_chart(results, drafted_players, position), use_container_width=True)
+
+st.markdown("#### ADP movement")
+st.altair_chart(_movement_chart(results, drafted_players), use_container_width=True)

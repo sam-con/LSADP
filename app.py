@@ -57,7 +57,7 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     # obscures the decisions that can actually occur in this draft.
     chart_data = results[results["current_adp"] <= drafted_players].copy()
     parity_line = alt.Chart(pd.DataFrame({"current_adp": [0, drafted_players], "league_adjusted_adp": [0, drafted_players]})).mark_line(
-        color="#9CA3AF", opacity=0.45, strokeDash=[5, 5]
+        color="#9CA3AF", opacity=0.72, strokeDash=[5, 5], strokeWidth=1.5
     ).encode(
         x=alt.X("current_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
         y=alt.Y("league_adjusted_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
@@ -67,7 +67,7 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
         y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(domain=[0, drafted_players])),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
     )
-    return alt.layer(parity_line, points).properties(
+    return alt.layer(points, parity_line).properties(
         height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)"
     )
 

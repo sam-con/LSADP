@@ -9,6 +9,16 @@ def test_generic_direct_stat_scoring_and_unknown_rules_are_exposed():
     assert unsupported_scoring_rules({"rec": 1, "unknown": -1}) == ["unknown"]
 
 
+def test_incompletion_scoring_is_derived_from_attempts_and_completions():
+    result = score_projection(
+        {"pass_att": 40, "pass_cmp": 25},
+        {"pass_att": 0.2, "pass_cmp": 0.5, "pass_inc": -1},
+    )
+    assert result.points == 5.5
+    assert result.applied_rules["pass_inc"] == -15
+    assert result.unsupported_rules == []
+
+
 def test_unused_defense_rules_do_not_create_an_offensive_board_warning():
     scoring = {"rec": 1, "bonus_pass_yd_300": 3, "bonus_def_td": 5}
     assert unsupported_scoring_rules(scoring, ["QB", "RB", "WR", "TE", "FLEX"]) == ["bonus_pass_yd_300"]

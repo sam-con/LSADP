@@ -31,7 +31,7 @@ The live season endpoint is:
 
 Each record has season statistics in `stats`, player metadata (including `position`, `first_name`, `last_name`, and `team`) in `player`, and market fields including `adp_ppr`, `adp_half_ppr`, `adp_std`, and `adp_2qb`. The `v1` endpoints are used for `/draft/{draft_id}` and `/league/{league_id}`.
 
-Observed projection statistics include direct counting fields such as `pass_yd`, `pass_td`, `pass_int`, `rush_yd`, `rush_td`, `rec`, `rec_yd`, `rec_td`, `rec_2pt`, `fum_lost`, first-down fields, and selected kicker/IDP fields. V1 focuses its ADP model on QB/RB/WR/TE, but the scoring mapper supports every direct projection key listed in `src/scoring.py`.
+Observed projection statistics include direct counting fields such as `pass_yd`, `pass_td`, `pass_int`, `pass_att`, `pass_cmp`, `rush_yd`, `rush_td`, `rec`, `rec_yd`, `rec_td`, `rec_2pt`, `fum_lost`, first-down fields, and selected kicker/IDP fields. V1 focuses its ADP model on QB/RB/WR/TE, but the scoring mapper supports every direct projection key listed in `src/scoring.py`. It also derives `pass_inc` as `max(pass_att - pass_cmp, 0)` for leagues that score incompletions.
 
 A live league response was also inspected before implementation. Its `scoring_settings` used the core offensive keys directly (`pass_yd`, `pass_td`, `pass_int`, `rush_yd`, `rush_td`, `rec`, `rec_yd`, `rec_td`, `fum_lost`), along with rules such as `bonus_pass_yd_300`, defensive scoring, and special-teams events. Direct keys map one-to-one; threshold/event rules without a corresponding projected counting stat are reported as unsupported.
 

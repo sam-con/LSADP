@@ -6,9 +6,9 @@ from collections.abc import Iterable, Mapping
 
 from .models import ScoringResult
 
-# These are counting statistics present in Sleeper's season-projection payload.
-# A rule is only modeled when the key has a direct, documented projection stat.
-SUPPORTED_STAT_KEYS = frozenset(
+# These are direct counting statistics present in Sleeper's season-projection
+# payload. Derived statistics are declared separately below.
+DIRECT_STAT_KEYS = frozenset(
     {
         "pass_yd", "pass_td", "pass_2pt", "pass_int", "pass_cmp", "pass_att", "pass_fd", "pass_int_td",
         "rush_yd", "rush_td", "rush_2pt", "rush_att", "rush_fd",
@@ -20,6 +20,8 @@ SUPPORTED_STAT_KEYS = frozenset(
         "bonus_rec_rb", "bonus_rec_te", "bonus_rec_wr", "bonus_rush_td_qb",
     }
 )
+DERIVED_STAT_KEYS = frozenset({"pass_inc"})
+SUPPORTED_STAT_KEYS = DIRECT_STAT_KEYS | DERIVED_STAT_KEYS
 
 
 def numeric_rules(scoring_settings: Mapping[str, object]) -> dict[str, float]:
@@ -83,6 +85,22 @@ def unsupported_scoring_rules(scoring_settings: Mapping[str, object], roster_pos
     return sorted(rules)
 
 
+def _stat_value(stats: Mapping[str, object], key: str) -> float:
+    """Return a direct Sleeper projection stat or a supported derived stat."""
+    def numeric_stat(name: str) -> float:
+        try:
+            return float((stats or {}).get(name, 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if key == "pass_inc":
+        # Sleeper projects attempts and completions, but does not expose a
+        # separate incompletion field.  Sleeper's pass_inc scoring rule is
+        # therefore calculated from the two available counting projections.
+        return max(0.0, numeric_stat("pass_att") - numeric_stat("pass_cmp"))
+    return numeric_stat(key)
+
+
 def score_projection(stats: Mapping[str, object], scoring_settings: Mapping[str, object]) -> ScoringResult:
     rules = numeric_rules(scoring_settings)
     applied: dict[str, float] = {}
@@ -90,10 +108,7 @@ def score_projection(stats: Mapping[str, object], scoring_settings: Mapping[str,
     for key, multiplier in rules.items():
         if key not in SUPPORTED_STAT_KEYS:
             continue
-        try:
-            stat = float((stats or {}).get(key, 0) or 0)
-        except (TypeError, ValueError):
-            stat = 0.0
+        stat = _stat_value(stats, key)
         contribution = stat * multiplier
         applied[key] = contribution
         points += contribution

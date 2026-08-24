@@ -56,20 +56,13 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     # market ADP are still in the table, but plotting hundreds of tail records
     # obscures the decisions that can actually occur in this draft.
     chart_data = results[results["current_adp"] <= drafted_players].copy()
-    parity_line = alt.Chart(pd.DataFrame({"current_adp": [0, drafted_players], "league_adjusted_adp": [0, drafted_players]})).mark_line(
-        color="#9CA3AF", opacity=0.72, strokeDash=[5, 5], strokeWidth=1.5
-    ).encode(
-        x=alt.X("current_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
-        y=alt.Y("league_adjusted_adp:Q", scale=alt.Scale(domain=[0, drafted_players])),
-    )
-    points = alt.Chart(chart_data).mark_circle(size=55).encode(
+    max_change = float(chart_data["adp_change"].abs().max()) if not chart_data.empty else 1.0
+    change_limit = max(1.0, max_change * 1.05)
+    return alt.Chart(chart_data).mark_circle(size=55).encode(
         x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players])),
-        y=alt.Y("league_adjusted_adp:Q", title="League-adjusted ADP", scale=alt.Scale(domain=[0, drafted_players])),
+        y=alt.Y("adp_change:Q", title="ADP change (+ = earlier)", scale=alt.Scale(domain=[-change_limit, change_limit])),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
-    )
-    return alt.layer(points, parity_line).properties(
-        height=370, title=f"Market ADP vs league-adjusted ADP (first {drafted_players} market picks)"
-    )
+    ).properties(height=370, title=f"ADP movement by market ADP (first {drafted_players} market picks)")
 
 
 def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, position: str):

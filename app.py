@@ -34,7 +34,7 @@ def _curve_chart(results: pd.DataFrame, position: str):
     for environment, rank_col, points_col in (("Reference", "reference_pos_rank", "reference_points"), ("League", "league_pos_rank", "league_points")):
         projected = subset[subset[points_col] > 0]
         rows.extend({"Environment": environment, "Positional rank": row[rank_col], "Projected points": row[points_col], "Player": row.player} for _, row in projected.iterrows())
-    return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
+    return alt.Chart(pd.DataFrame(rows)).mark_line().encode(
         x=alt.X("Positional rank:Q", sort="ascending"), y=alt.Y("Projected points:Q"), color="Environment:N",
         tooltip=["Player:N", "Environment:N", "Positional rank:Q", alt.Tooltip("Projected points:Q", format=".1f")],
     ).properties(height=270, title=f"{position} scoring curve")
@@ -58,10 +58,11 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     chart_data = results[results["current_adp"] <= drafted_players].copy()
     max_change = float(chart_data["adp_change"].abs().max()) if not chart_data.empty else 1.0
     change_limit = max(1.0, max_change * 1.05)
-    return alt.Chart(chart_data).mark_circle(size=55).encode(
-        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players]), axis=alt.Axis(labelFontWeight="bold", titleFontWeight="bold")),
-        y=alt.Y("adp_change:Q", title="ADP change (+ = earlier)", scale=alt.Scale(domain=[-change_limit, change_limit]), axis=alt.Axis(labelFontWeight="bold", titleFontWeight="bold")),
+    return alt.Chart(chart_data).mark_line().encode(
+        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players]), axis=alt.Axis(domainWidth=2, tickWidth=2)),
+        y=alt.Y("adp_change:Q", title="ADP change (+ = earlier)", scale=alt.Scale(domain=[-change_limit, change_limit]), axis=alt.Axis(domainWidth=2, tickWidth=2)),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
+        order=alt.Order("current_adp:Q"),
     ).properties(height=370, title=f"ADP movement by market ADP (first {drafted_players} market picks)")
 
 
@@ -89,7 +90,7 @@ def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, pos
         }
         for row in adjusted.itertuples()
     )
-    return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
+    return alt.Chart(pd.DataFrame(rows)).mark_line().encode(
         x=alt.X("Positional slot:Q", title="Positional rank", sort="ascending"),
         y=alt.Y("Overall ADP:Q", scale=alt.Scale(domain=[0, drafted_players], reverse=True)),
         color="Environment:N",

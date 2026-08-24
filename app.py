@@ -71,7 +71,7 @@ def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, pos
     adjusted = group[group["league_adjusted_adp"] <= drafted_players].sort_values("adjusted_market_pos_rank")
     rows.extend(
         {
-            "Environment": "Reference market",
+            "Environment": "Reference",
             "Positional slot": row.market_pos_rank,
             "Overall ADP": row.current_adp,
             "Player": row.player,
@@ -80,7 +80,7 @@ def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, pos
     )
     rows.extend(
         {
-            "Environment": "League-adjusted",
+            "Environment": "League",
             "Positional slot": row.adjusted_market_pos_rank,
             "Overall ADP": row.league_adjusted_adp,
             "Player": row.player,
@@ -88,11 +88,11 @@ def _positional_adp_curve_chart(results: pd.DataFrame, drafted_players: int, pos
         for row in adjusted.itertuples()
     )
     return alt.Chart(pd.DataFrame(rows)).mark_line(point=True).encode(
-        x=alt.X("Positional slot:Q", title="Positional market slot"),
+        x=alt.X("Positional slot:Q", title="Positional rank", sort="ascending"),
         y=alt.Y("Overall ADP:Q", scale=alt.Scale(domain=[0, drafted_players], reverse=True)),
-        color=alt.Color("Environment:N", scale=alt.Scale(domain=["Reference market", "League-adjusted"], range=["#4c78a8", "#f58518"])),
+        color="Environment:N",
         tooltip=["Environment:N", "Player:N", "Positional slot:Q", alt.Tooltip("Overall ADP:Q", format=".1f")],
-    ).properties(height=360, title=f"{position} ADP curve")
+    ).properties(height=270, title=f"{position} ADP curve")
 
 
 def _run(draft_id: str):
@@ -119,26 +119,29 @@ with st.form("draft-form"):
     draft_id = st.text_input("Sleeper Draft ID", placeholder="e.g. 123456789012345678")
     submitted = st.form_submit_button("Estimate league ADP", type="primary")
 
-if not submitted:
+if submitted:
+    try:
+        draft_id = validate_draft_id(draft_id)
+        with st.spinner("Loading Sleeper league settings, projections, and market ADP…"):
+            st.session_state["league_adp_analysis"] = (*_run(draft_id), draft_id)
+    except (ValueError, SleeperAPIError) as exc:
+        st.error(str(exc))
+        st.stop()
+    except Exception as exc:  # Last-resort UI boundary; details remain available in server logs.
+        st.error(f"Could not calculate ADP: {exc}")
+        st.stop()
+
+if "league_adp_analysis" not in st.session_state:
     st.info("Enter a draft ID to select the closest Sleeper market automatically: 1QB standard, half-PPR, or PPR; or Superflex/2QB PPR-market ADP.")
     st.stop()
 
-try:
-    draft_id = validate_draft_id(draft_id)
-    with st.spinner("Loading Sleeper league settings, projections, and market ADP…"):
-        draft, league, results, summaries, reference = _run(draft_id)
-except (ValueError, SleeperAPIError) as exc:
-    st.error(str(exc))
-    st.stop()
-except Exception as exc:  # Last-resort UI boundary; details remain available in server logs.
-    st.error(f"Could not calculate ADP: {exc}")
-    st.stop()
+draft, league, results, summaries, reference, active_draft_id = st.session_state["league_adp_analysis"]
 
 league_name = league.get("name") or "Sleeper league"
 teams = _league_teams(league)
 drafted_players = _drafted_player_count(draft, teams, len(league.get("roster_positions") or []))
 st.subheader(league_name)
-st.caption(f"{teams} teams · {drafted_players} picks · Draft {draft.get('draft_id', draft_id)} · {len(results)} projected QB/RB/WR/TE players")
+st.caption(f"{teams} teams · {drafted_players} picks · Draft {draft.get('draft_id', active_draft_id)} · {len(results)} projected QB/RB/WR/TE players")
 st.info(f"Reference market selected: **{reference.name}** (Sleeper `{reference.adp_field}`). Your exact league scoring is still used for league projections and scarcity adjustments.")
 
 st.markdown("#### Player board")
@@ -164,5 +167,7 @@ for tab, position in zip(tabs, ("QB", "RB", "WR", "TE")):
 
 st.markdown("#### Positional ADP curves")
 st.caption("Compare the observed positional market curve with the curve produced by this league's scoring and roster environment.")
-adp_curve_position = st.selectbox("Position", ["QB", "RB", "WR", "TE"], key="adp-curve-position")
-st.altair_chart(_positional_adp_curve_chart(results, drafted_players, adp_curve_position), use_container_width=True)
+adp_curve_tabs = st.tabs(["QB", "RB", "WR", "TE"])
+for tab, position in zip(adp_curve_tabs, ("QB", "RB", "WR", "TE")):
+    with tab:
+        st.altair_chart(_positional_adp_curve_chart(results, drafted_players, position), use_container_width=True)

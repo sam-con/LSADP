@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.adp_model import _calibrate_position_curves, _curve_coordinates, estimate_adjusted_adp
+from src.adp_model import _calibrate_position_curves, _curve_coordinates, _smooth_position_curve_deltas, estimate_adjusted_adp
 
 
 REFERENCE_ROSTER = ("QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX")
@@ -135,3 +135,24 @@ def test_tied_curve_coordinates_restart_at_each_tied_value():
     assert coordinates[1] > coordinates[2] > coordinates[3] > coordinates[4]
     assert coordinates[4] == -0.2
     assert coordinates[4] > coordinates[5]
+
+
+def test_position_curve_smoothing_spreads_a_single_slot_cliff_without_changing_position_mean():
+    frame = pd.DataFrame(
+        {
+            "position": ["RB"] * 9,
+            "market_pos_rank": np.arange(1, 10),
+            "market_strength": np.linspace(1.0, 0.2, 9),
+            "position_curve_delta": [0.0, 0.0, 0.0, 0.0, -0.30, -0.30, -0.30, -0.30, -0.30],
+        }
+    )
+    smoothed = _smooth_position_curve_deltas(frame)
+    raw = frame["position_curve_delta"].to_numpy()
+    adjusted = smoothed["position_curve_delta"].to_numpy()
+
+    assert np.isclose(adjusted.mean(), raw.mean())
+    assert np.abs(np.diff(adjusted)).max() < np.abs(np.diff(raw)).max()
+    assert smoothed.loc[3, "position_curve_delta"] < 0
+    assert smoothed.loc[4, "position_curve_delta"] > -0.30
+    final_strength = smoothed["market_strength"] + smoothed["position_curve_delta"]
+    assert final_strength.is_monotonic_decreasing

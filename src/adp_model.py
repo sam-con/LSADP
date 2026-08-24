@@ -9,6 +9,9 @@ from .models import CORE_POSITIONS
 from .scarcity import build_scarcity_frame
 
 
+POSITION_CURVE_SMOOTHING_WINDOW = 5
+
+
 def _strict_market_curve(adps: pd.Series) -> np.ndarray:
     values = np.sort(adps.to_numpy(dtype=float))
     for index in range(1, len(values)):
@@ -141,6 +144,53 @@ def _calibrate_position_curves(result: pd.DataFrame) -> pd.DataFrame:
     return output
 
 
+def _smooth_position_curve_deltas(result: pd.DataFrame, window: int = POSITION_CURVE_SMOOTHING_WINDOW) -> pd.DataFrame:
+    """Smooth adjacent positional-slot adjustments without changing position value.
+
+    The global board should show genuine gaps when other positions belong between
+    two RB (or QB/WR/TE) slots.  A raw VORP-to-market fit can nevertheless put a
+    cliff at one exact slot when a projected tier boundary falls there.  A short
+    triangular local smoother spreads that boundary across nearby market slots.
+    Re-centering preserves the mean adjustment for each position, so smoothing
+    changes *where* the curve bends rather than how much the position gains or
+    loses overall.
+    """
+    if window < 3 or window % 2 == 0:
+        raise ValueError("Position curve smoothing window must be an odd integer of at least 3.")
+
+    radius = window // 2
+    weights = np.arange(1, radius + 2, dtype=float)
+    weights = np.concatenate((weights, weights[-2::-1]))
+    weights /= weights.sum()
+    pieces: list[pd.DataFrame] = []
+    for _, group in result.groupby("position", sort=False):
+        ordered = group.sort_values("market_pos_rank", kind="stable").copy()
+        raw = ordered["position_curve_delta"].to_numpy(dtype=float)
+        if len(raw) >= 3:
+            # Edge padding prevents the first/last market slots from being
+            # artificially pulled toward zero simply because they lack neighbors.
+            padded = np.pad(raw, radius, mode="edge")
+            smoothed = np.convolve(padded, weights, mode="valid")
+            smoothed += raw.mean() - smoothed.mean()
+        else:
+            smoothed = raw
+
+        # A positional draft curve must not become stronger at a later slot.
+        # Isotonic calibration and a player-specific reshuffle can otherwise
+        # make RB7 edge RB6 by a tiny amount, producing a visible fold in the
+        # chart and an avoidable extra global-rank jump.  Preserve the original
+        # mean strength after making the slots monotonic.
+        if "market_strength" in ordered:
+            target_strength = ordered["market_strength"].to_numpy(dtype=float) + smoothed
+            monotonic_strength = np.minimum.accumulate(target_strength)
+            monotonic_strength += target_strength.mean() - monotonic_strength.mean()
+            smoothed = monotonic_strength - ordered["market_strength"].to_numpy(dtype=float)
+        ordered["raw_position_curve_delta"] = raw
+        ordered["position_curve_delta"] = smoothed
+        pieces.append(ordered)
+    return pd.concat(pieces, ignore_index=True)
+
+
 def _position_reliability(result: pd.DataFrame) -> pd.Series:
     """Reference projection/market agreement determines how much to trust a nudge."""
     reliability: dict[str, float] = {}
@@ -197,6 +247,7 @@ def estimate_adjusted_adp(players: pd.DataFrame, reference_scoring: str, league_
     result["current_adp_rank"] = market_rank.reindex(result.index).astype(int)
     result["market_strength"] = 1 - (result["current_adp_rank"] - 1) / max(len(result) - 1, 1)
     result = _calibrate_position_curves(result)
+    result = _smooth_position_curve_deltas(result)
 
     # Only changes in a player's scoring profile can reshuffle players within a
     # position.  Replacement-level and roster changes are already represented

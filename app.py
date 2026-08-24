@@ -59,8 +59,8 @@ def _movement_chart(results: pd.DataFrame, drafted_players: int):
     max_change = float(chart_data["adp_change"].abs().max()) if not chart_data.empty else 1.0
     change_limit = max(1.0, max_change * 1.05)
     return alt.Chart(chart_data).mark_circle(size=55).encode(
-        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players])),
-        y=alt.Y("adp_change:Q", title="ADP change (+ = earlier)", scale=alt.Scale(domain=[-change_limit, change_limit])),
+        x=alt.X("current_adp:Q", title="Current Sleeper ADP", scale=alt.Scale(domain=[0, drafted_players]), axis=alt.Axis(labelFontWeight="bold", titleFontWeight="bold")),
+        y=alt.Y("adp_change:Q", title="ADP change (+ = earlier)", scale=alt.Scale(domain=[-change_limit, change_limit]), axis=alt.Axis(labelFontWeight="bold", titleFontWeight="bold")),
         color="position:N", tooltip=["player:N", "position:N", alt.Tooltip("current_adp:Q", format=".1f"), alt.Tooltip("league_adjusted_adp:Q", format=".1f"), alt.Tooltip("adp_change:Q", format="+.1f")],
     ).properties(height=370, title=f"ADP movement by market ADP (first {drafted_players} market picks)")
 
